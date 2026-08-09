@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.2" baseProfile="tiny-ps" viewBox="0 0 512 512">
+<title>Traknio</title>
+<rect x="16" y="16" width="480" height="480" rx="92" fill="#020b21" stroke="#315fc4" stroke-width="4"/>
+<path d="M 121,303 L 98,304 L 73,365 L 96,364 L 121,306 Z" fill="#008cf7"/>
+<path d="M 172,267 L 147,267 L 105,365 L 130,364 Z" fill="#2657f7"/>
+<path d="M 228,230 L 199,231 L 140,365 L 168,364 Z" fill="#3c49f7"/>
+<path d="M 185,367 L 256,333 L 322,211 L 386,210 L 437,161 L 198,162 L 151,210 L 258,215 Z" fill="#6e3cf9"/>
+</svg>
