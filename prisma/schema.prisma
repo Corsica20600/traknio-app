@@ -91,6 +91,11 @@ enum WatchSessionStatus {
   COMPLETED
 }
 
+enum WatchActionReceiptStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
 enum SubscriptionStatus {
   FREE
   TRIALING
@@ -176,6 +181,7 @@ model UserProfile {
   integrationConnections        IntegrationConnection[]
   watchPairingTokens            WatchPairingToken[]
   watchDevices                  WatchDevice[]
+  watchActionReceipts           WatchActionReceipt[]
   workoutSessions               WorkoutSession[]
   progressMetrics               ProgressMetric[]
   bodyMeasurements              BodyMeasurement[]
@@ -366,6 +372,25 @@ model WatchPairingToken {
 
   @@index([userProfileId, expiresAt])
   @@index([expiresAt, consumedAt])
+}
+
+model WatchActionReceipt {
+  id            String                   @id @default(cuid())
+  userProfileId String
+  requestId     String
+  operation     String
+  payloadHash   String
+  status        WatchActionReceiptStatus @default(IN_PROGRESS)
+  httpStatus    Int?
+  response      Json?
+  completedAt   DateTime?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  userProfile   UserProfile              @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([userProfileId, requestId, operation])
+  @@index([userProfileId, status, updatedAt])
+  @@index([status, createdAt])
 }
 
 model HealthDevice {

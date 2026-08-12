@@ -11,14 +11,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 class WatchViewModel(context: Context) : ViewModel() {
-    private val tokenStore = WatchTokenStore(context.applicationContext)
-    private val pairingClient = WearPairingClient(context.applicationContext)
+    private val appContext = context.applicationContext
+    private val tokenStore = WatchTokenStore(appContext)
+    private val pairingClient = WearPairingClient(appContext)
+    private val phoneRelayClient = WatchPhoneRelayClient(appContext)
     private val watchLabel = Build.MODEL?.takeIf { it.isNotBlank() } ?: "Montre Wear OS"
     private val api: TraknioWatchApi = TraknioWatchApi(
         deviceTokenProvider = { tokenStore.deviceToken() },
+        phoneRelayClient = phoneRelayClient,
     )
 
     private val _state = MutableStateFlow<WatchScreenState>(WatchScreenState.Loading)
@@ -34,6 +38,11 @@ class WatchViewModel(context: Context) : ViewModel() {
     init {
         startPolling()
         startDisplayTicker()
+        viewModelScope.launch {
+            WatchRelayEvents.flow.collectLatest { result ->
+                applyRelayResult(result)
+            }
+        }
     }
 
     fun refresh() {
@@ -126,12 +135,14 @@ class WatchViewModel(context: Context) : ViewModel() {
         try {
             ensurePaired()
             applyPayload(api.currentSession(latestPayload?.sessionId), syncLabel = "Sync OK")
+            consumeStoredRelayResults()
         } catch (error: Throwable) {
             if (isPairingRequired(error)) {
                 tokenStore.clear()
                 val recovered = runCatching {
                     ensurePaired()
                     applyPayload(api.currentSession(latestPayload?.sessionId), syncLabel = "Sync OK")
+                    consumeStoredRelayResults()
                 }.isSuccess
                 if (recovered) return
             }
@@ -156,6 +167,16 @@ class WatchViewModel(context: Context) : ViewModel() {
                 ensurePaired()
                 applyPayload(action(payload), syncLabel = "Sync OK")
             } catch (error: Throwable) {
+                if (error is WatchRelayQueuedException) {
+                    val queued = _state.value as? WatchScreenState.Ready
+                    if (queued != null) {
+                        _state.value = queued.copy(
+                            syncLabel = "Attente téléphone",
+                            error = null,
+                        )
+                    }
+                    return@launch
+                }
                 if (isPairingRequired(error)) {
                     tokenStore.clear()
                     Log.i(TAG, "pairing required from backend; token cleared")
@@ -223,6 +244,36 @@ class WatchViewModel(context: Context) : ViewModel() {
         if (ready != null) {
             _state.value = ready.copy(syncLabel = "Sync locale", error = null, busyAction = null)
         }
+    }
+
+    private fun consumeStoredRelayResults() {
+        WatchRelayResultStore.consumeAll(appContext).forEach(::applyRelayResult)
+    }
+
+    private fun applyRelayResult(result: PhoneRelayResult) {
+        val ready = _state.value as? WatchScreenState.Ready ?: return
+        if (result.isTerminal()) WatchRelayResultStore.remove(appContext, result.requestId)
+        when (result.state) {
+            "SENDING" -> _state.value = ready.copy(syncLabel = "Envoi...", error = null)
+            "WAITING_PHONE" -> _state.value = ready.copy(syncLabel = "Attente téléphone", error = null)
+            "COMPLETED" -> result.payload?.let { payload ->
+                applyPayload(WatchPayloadJson.parse(payload), syncLabel = "Synchronisé")
+            }
+            "QUEUED" -> _state.value = ready.copy(
+                syncLabel = "En attente réseau",
+                error = null,
+            )
+            "FAILED" -> _state.value = ready.copy(
+                busyAction = null,
+                syncLabel = "Échec",
+                error = result.error ?: "Synchronisation impossible",
+            )
+        }
+    }
+
+    override fun onCleared() {
+        phoneRelayClient.close()
+        super.onCleared()
     }
 
     private fun applyPayload(payload: WatchPayload, syncLabel: String) {

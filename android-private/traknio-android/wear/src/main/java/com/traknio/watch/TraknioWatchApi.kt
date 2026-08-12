@@ -8,22 +8,30 @@ import java.io.BufferedReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import java.io.IOException
+import java.util.UUID
 
 class TraknioWatchApi(
     private val baseUrl: String = BuildConfig.TRAKNIO_SYNC_BASE_URL.trimEnd('/'),
     private val deviceTokenProvider: () -> String? = { null },
+    private val phoneRelayClient: WatchPhoneRelayClient? = null,
 ) {
-    suspend fun currentSession(sessionId: String? = null): WatchPayload = requestPayload(
-        path = if (sessionId.isNullOrBlank()) {
-            "/api/watch/current-session"
-        } else {
-            "/api/watch/current-session?sessionId=${sessionId.urlEncode()}"
-        },
-        method = "GET",
-        body = null,
-    )
+    suspend fun currentSession(sessionId: String? = null): WatchPayload = executeWithFallback(
+        WatchRelayRequest(UUID.randomUUID().toString(), "current-session", sessionId),
+    ) {
+        requestPayload(
+            path = if (sessionId.isNullOrBlank()) "/api/watch/current-session" else "/api/watch/current-session?sessionId=${sessionId.urlEncode()}",
+            method = "GET",
+            body = null,
+            requestId = null,
+        )
+    }
 
     suspend fun validateSet(payload: WatchPayload): WatchPayload = postAction(
+        operation = "validate-set",
         path = "/api/watch/validate-set",
         sessionId = payload.sessionId,
         extra = mapOf(
@@ -32,25 +40,27 @@ class TraknioWatchApi(
         ),
     )
 
-    suspend fun skipRest(sessionId: String): WatchPayload = postAction("/api/watch/skip-rest", sessionId)
+    suspend fun skipRest(sessionId: String): WatchPayload = postAction("skip-rest", "/api/watch/skip-rest", sessionId)
 
     suspend fun addRest(sessionId: String, seconds: Int): WatchPayload = postAction(
+        operation = "adjust-rest",
         path = "/api/watch/adjust-rest",
         sessionId = sessionId,
         extra = mapOf("deltaSeconds" to seconds),
     )
 
     suspend fun removeRest(sessionId: String, seconds: Int): WatchPayload = postAction(
+        operation = "adjust-rest",
         path = "/api/watch/adjust-rest",
         sessionId = sessionId,
         extra = mapOf("deltaSeconds" to -seconds),
     )
 
-    suspend fun nextExercise(sessionId: String): WatchPayload = postAction("/api/watch/next-exercise", sessionId)
+    suspend fun nextExercise(sessionId: String): WatchPayload = postAction("next-exercise", "/api/watch/next-exercise", sessionId)
 
-    suspend fun previousExercise(sessionId: String): WatchPayload = postAction("/api/watch/previous-exercise", sessionId)
+    suspend fun previousExercise(sessionId: String): WatchPayload = postAction("previous-exercise", "/api/watch/previous-exercise", sessionId)
 
-    suspend fun completeSession(sessionId: String): WatchPayload = postAction("/api/watch/complete-session", sessionId)
+    suspend fun completeSession(sessionId: String): WatchPayload = postAction("complete-session", "/api/watch/complete-session", sessionId)
 
     suspend fun completePairing(pairingToken: String, label: String): PairingResult = withContext(Dispatchers.IO) {
         Log.i(TAG, "pair complete called labelPresent=${label.isNotBlank()}")
@@ -89,6 +99,7 @@ class TraknioWatchApi(
     }
 
     private suspend fun postAction(
+        operation: String,
         path: String,
         sessionId: String,
         extra: Map<String, Any?> = emptyMap(),
@@ -98,10 +109,29 @@ class TraknioWatchApi(
         for ((key, value) in extra) {
             body.put(key, value)
         }
-        return requestPayload(path, "POST", body)
+        val request = WatchRelayRequest(
+            requestId = UUID.randomUUID().toString(),
+            operation = operation,
+            sessionId = sessionId,
+            actualReps = extra["actualReps"] as? Int,
+            weight = extra["weight"] as? Double,
+            deltaSeconds = extra["deltaSeconds"] as? Int,
+        )
+        return executeWithFallback(request) { requestPayload(path, "POST", body, request.requestId) }
     }
 
-    private suspend fun requestPayload(path: String, method: String, body: JSONObject?): WatchPayload = withContext(Dispatchers.IO) {
+    private suspend fun executeWithFallback(request: WatchRelayRequest, direct: suspend () -> WatchPayload): WatchPayload {
+        return try {
+            direct()
+        } catch (error: Throwable) {
+            if (!isTransportFailure(error)) throw error
+            Log.i(TAG, "direct transport failed; falling back operation=${request.operation} request=${request.requestId.takeLast(8)}")
+            val relay = phoneRelayClient ?: throw error
+            relay.relay(request)
+        }
+    }
+
+    private suspend fun requestPayload(path: String, method: String, body: JSONObject?, requestId: String?): WatchPayload = withContext(Dispatchers.IO) {
         val connection = (URL("$baseUrl$path").openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 8_000
@@ -110,6 +140,9 @@ class TraknioWatchApi(
             val deviceToken = deviceTokenProvider()?.trim().orEmpty()
             if (deviceToken.isNotBlank()) {
                 setRequestProperty("x-watch-device-token", deviceToken)
+            }
+            if (!requestId.isNullOrBlank()) {
+                setRequestProperty("x-traknio-action-id", requestId)
             }
             if (body != null) {
                 doOutput = true
@@ -132,9 +165,18 @@ class TraknioWatchApi(
                 throw IllegalStateException(json.optString("error", "Erreur serveur"))
             }
             parsePayload(json.getJSONObject("payload"))
+        } catch (error: IOException) {
+            throw WatchTransportException(error)
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun isTransportFailure(error: Throwable): Boolean {
+        val cause = generateSequence(error) { it.cause }.firstOrNull {
+            it is WatchTransportException || it is UnknownHostException || it is ConnectException || it is SocketTimeoutException
+        }
+        return cause != null
     }
 
     private fun readBody(connection: HttpURLConnection, statusCode: Int): String {

@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/src/lib/prisma";
 import { getExerciseDisplayName } from "@/src/lib/exercise-overrides";
 import { getOrCreateDemoProfile } from "@/src/server/fitness-queries";
@@ -39,6 +40,8 @@ type OrderedExercise = {
   plannedWeightKg: number | null;
 };
 
+type WatchDatabase = Prisma.TransactionClient | typeof prisma;
+
 function parseWeightKgFromText(text?: string | null) {
   if (!text) return null;
   const match = text.match(/(\d+(?:[.,]\d+)?)\s*kg/i);
@@ -61,8 +64,8 @@ function getLevelFromXp(totalXp: number) {
   return level;
 }
 
-async function getLatestCalories(userProfileId: string) {
-  const metric = await prisma.progressMetric.findFirst({
+async function getLatestCalories(userProfileId: string, db: WatchDatabase) {
+  const metric = await db.progressMetric.findFirst({
     where: {
       userProfileId,
       metricType: "PERFORMANCE",
@@ -80,18 +83,18 @@ async function getWatchSessionSummary(session: {
   userProfileId: string;
   durationSeconds: number | null;
   status: string;
-}): Promise<WatchSessionSummary | undefined> {
+}, db: WatchDatabase): Promise<WatchSessionSummary | undefined> {
   if (session.status !== "COMPLETED") return undefined;
 
   const [sets, completedSessionsCount, calories] = await Promise.all([
-    prisma.workoutSet.findMany({
+    db.workoutSet.findMany({
       where: { workoutSessionId: session.id, isCompleted: true },
       select: { actualReps: true, actualWeightKg: true },
     }),
-    prisma.workoutSession.count({
+    db.workoutSession.count({
       where: { userProfileId: session.userProfileId, status: "COMPLETED" },
     }),
-    getLatestCalories(session.userProfileId),
+    getLatestCalories(session.userProfileId, db),
   ]);
 
   const volumeKg = sets.reduce((acc, set) => acc + (set.actualReps ?? 0) * (set.actualWeightKg ?? 0), 0);
@@ -109,9 +112,9 @@ async function getWatchSessionSummary(session: {
   };
 }
 
-async function resolveSession(sessionId?: string, userProfileId?: string) {
+async function resolveSession(sessionId?: string, userProfileId?: string, db: WatchDatabase = prisma) {
   if (sessionId) {
-    return prisma.workoutSession.findUnique({
+    return db.workoutSession.findUnique({
       where: userProfileId ? { id: sessionId, userProfileId } : { id: sessionId },
       include: {
         watchSession: true,
@@ -124,7 +127,7 @@ async function resolveSession(sessionId?: string, userProfileId?: string) {
   }
 
   const profile = userProfileId ? null : await getOrCreateDemoProfile();
-  return prisma.workoutSession.findFirst({
+  return db.workoutSession.findFirst({
     where: { userProfileId: userProfileId ?? profile!.id, status: "IN_PROGRESS" },
     include: {
       watchSession: true,
@@ -144,8 +147,8 @@ async function getOrderedExercisesForSession(session: {
   programDayId: string | null;
   notes: string | null;
   sets: Array<{ exerciseId: string; exercise: { id: string; slug: string; name: string; nameFr: string | null } }>;
-}) {
-  const latestWeightsRows = await prisma.workoutSet.findMany({
+}, db: WatchDatabase) {
+  const latestWeightsRows = await db.workoutSet.findMany({
     where: {
       workoutSession: { userProfileId: session.userProfileId },
       actualWeightKg: { gt: 0 },
@@ -162,7 +165,7 @@ async function getOrderedExercisesForSession(session: {
   }
 
   if (session.programId) {
-    const program = await prisma.program.findUnique({
+    const program = await db.program.findUnique({
       where: { id: session.programId },
       include: {
         days: {
@@ -223,7 +226,7 @@ async function getOrderedExercisesForSession(session: {
   }
   if (distinctFromSets.size > 0) return [...distinctFromSets.values()];
 
-  const fallback = await prisma.exercise.findMany({
+  const fallback = await db.exercise.findMany({
     where: { isActive: true },
     select: { id: true, slug: true, name: true, nameFr: true },
     orderBy: [{ category: "asc" }, { name: "asc" }],
@@ -240,11 +243,11 @@ async function getOrderedExercisesForSession(session: {
   }));
 }
 
-export async function getWatchPayload(sessionId?: string, userProfileId?: string): Promise<WatchPayload | null> {
-  const session = await resolveSession(sessionId, userProfileId);
+export async function getWatchPayload(sessionId?: string, userProfileId?: string, db: WatchDatabase = prisma): Promise<WatchPayload | null> {
+  const session = await resolveSession(sessionId, userProfileId, db);
   if (!session) return null;
 
-  const ordered = await getOrderedExercisesForSession(session);
+  const ordered = await getOrderedExercisesForSession(session, db);
   const totalExercises = Math.max(1, ordered.length);
   const exerciseIndexRaw = session.watchSession?.currentExerciseIndex ?? 0;
   const exerciseIndex = Math.max(0, Math.min(totalExercises - 1, exerciseIndexRaw));
@@ -257,11 +260,11 @@ export async function getWatchPayload(sessionId?: string, userProfileId?: string
     ? liveTarget.targetReps
     : (currentExercise?.targetReps ?? (DEFAULT_REPS[Math.min(totalSets - 1, setIndex - 1)] ?? DEFAULT_REPS[0]));
 
-  const latestSetForCurrent = await prisma.workoutSet.findFirst({
+  const latestSetForCurrent = await db.workoutSet.findFirst({
     where: { workoutSessionId: session.id, exerciseId: currentExercise.exerciseId, setIndex },
     orderBy: { createdAt: "desc" },
   });
-  const latestCompletedSet = await prisma.workoutSet.findFirst({
+  const latestCompletedSet = await db.workoutSet.findFirst({
     where: { workoutSessionId: session.id, isCompleted: true, completedAt: { not: null } },
     orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
   });
@@ -283,7 +286,7 @@ export async function getWatchPayload(sessionId?: string, userProfileId?: string
     weight: latestSetForCurrent?.actualWeightKg ?? (liveTarget?.exerciseId === currentExercise.exerciseId && liveTarget.setIndex === setIndex ? liveTarget.targetWeightKg : null) ?? currentExercise.plannedWeightKg ?? null,
     restRemaining,
     status: session.status === "IN_PROGRESS" && session.watchSession?.status === "PAUSED" ? "READY_TO_COMPLETE" : session.status,
-    summary: await getWatchSessionSummary(session),
+    summary: await getWatchSessionSummary(session, db),
   };
 }
 
@@ -292,10 +295,10 @@ export async function validateWatchSet(input: {
   actualReps?: number | null;
   weight?: number | null;
   userProfileId?: string;
-}) {
-  const session = await resolveSession(input.sessionId, input.userProfileId);
+}, db: WatchDatabase = prisma) {
+  const session = await resolveSession(input.sessionId, input.userProfileId, db);
   if (!session) return null;
-  const ordered = await getOrderedExercisesForSession(session);
+  const ordered = await getOrderedExercisesForSession(session, db);
   const exerciseIndex = Math.max(0, Math.min(ordered.length - 1, session.watchSession?.currentExerciseIndex ?? 0));
   const currentExercise = ordered[exerciseIndex];
   if (!currentExercise) return null;
@@ -309,12 +312,12 @@ export async function validateWatchSet(input: {
     ? liveTarget.targetWeightKg
     : null;
 
-  const existing = await prisma.workoutSet.findFirst({
+  const existing = await db.workoutSet.findFirst({
     where: { workoutSessionId: session.id, exerciseId: currentExercise.exerciseId, setIndex },
     orderBy: { createdAt: "desc" },
   });
 
-  const latestPositiveWeightInSession = await prisma.workoutSet.findFirst({
+  const latestPositiveWeightInSession = await db.workoutSet.findFirst({
     where: {
       workoutSessionId: session.id,
       exerciseId: currentExercise.exerciseId,
@@ -323,7 +326,7 @@ export async function validateWatchSet(input: {
     orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
     select: { actualWeightKg: true },
   });
-  const latestPositiveWeightGlobal = await prisma.workoutSet.findFirst({
+  const latestPositiveWeightGlobal = await db.workoutSet.findFirst({
     where: {
       exerciseId: currentExercise.exerciseId,
       actualWeightKg: { gt: 0 },
@@ -351,9 +354,9 @@ export async function validateWatchSet(input: {
   };
 
   if (existing) {
-    await prisma.workoutSet.update({ where: { id: existing.id }, data: payload });
+    await db.workoutSet.update({ where: { id: existing.id }, data: payload });
   } else {
-    await prisma.workoutSet.create({
+    await db.workoutSet.create({
       data: {
         workoutSessionId: session.id,
         exerciseId: currentExercise.exerciseId,
@@ -368,7 +371,7 @@ export async function validateWatchSet(input: {
 
   if (isExerciseFinished && isLastExercise) {
     const endedAt = new Date();
-    await prisma.workoutSession.update({
+    await db.workoutSession.update({
       where: { id: session.id },
       data: {
         status: "COMPLETED",
@@ -376,7 +379,7 @@ export async function validateWatchSet(input: {
         durationSeconds: session.startedAt ? Math.max(60, Math.floor((endedAt.getTime() - session.startedAt.getTime()) / 1000)) : null,
       },
     });
-    await prisma.watchSession.upsert({
+    await db.watchSession.upsert({
       where: { workoutSessionId: session.id },
       update: {
         status: "COMPLETED",
@@ -390,14 +393,14 @@ export async function validateWatchSet(input: {
         lastSyncAt: new Date(),
       },
     });
-    const final = await getWatchPayload(session.id, input.userProfileId);
+    const final = await getWatchPayload(session.id, input.userProfileId, db);
     return final ? { ...final, status: "COMPLETED", restRemaining: 0 } : null;
   }
 
   const nextExerciseIndex = isExerciseFinished && !isLastExercise ? exerciseIndex + 1 : exerciseIndex;
   const nextSetIndex = isExerciseFinished ? 1 : setIndex + 1;
 
-  await prisma.watchSession.upsert({
+  await db.watchSession.upsert({
     where: { workoutSessionId: session.id },
     update: {
       currentExerciseIndex: nextExerciseIndex,
@@ -414,13 +417,13 @@ export async function validateWatchSet(input: {
     },
   });
 
-  return getWatchPayload(session.id, input.userProfileId);
+  return getWatchPayload(session.id, input.userProfileId, db);
 }
 
-export async function nextWatchExercise(sessionId: string, userProfileId?: string) {
-  const state = await getWatchPayload(sessionId, userProfileId);
+export async function nextWatchExercise(sessionId: string, userProfileId?: string, db: WatchDatabase = prisma) {
+  const state = await getWatchPayload(sessionId, userProfileId, db);
   if (!state) return null;
-  await prisma.watchSession.upsert({
+  await db.watchSession.upsert({
     where: { workoutSessionId: state.sessionId },
     update: {
       currentExerciseIndex: state.exerciseIndex,
@@ -436,13 +439,13 @@ export async function nextWatchExercise(sessionId: string, userProfileId?: strin
       lastSyncAt: new Date(),
     },
   });
-  return getWatchPayload(state.sessionId, userProfileId);
+  return getWatchPayload(state.sessionId, userProfileId, db);
 }
 
-export async function previousWatchExercise(sessionId: string, userProfileId?: string) {
-  const state = await getWatchPayload(sessionId, userProfileId);
+export async function previousWatchExercise(sessionId: string, userProfileId?: string, db: WatchDatabase = prisma) {
+  const state = await getWatchPayload(sessionId, userProfileId, db);
   if (!state) return null;
-  await prisma.watchSession.upsert({
+  await db.watchSession.upsert({
     where: { workoutSessionId: state.sessionId },
     update: {
       currentExerciseIndex: Math.max(0, state.exerciseIndex - 2),
@@ -458,18 +461,18 @@ export async function previousWatchExercise(sessionId: string, userProfileId?: s
       lastSyncAt: new Date(),
     },
   });
-  return getWatchPayload(state.sessionId, userProfileId);
+  return getWatchPayload(state.sessionId, userProfileId, db);
 }
 
-export async function skipWatchRest(sessionId: string, userProfileId?: string) {
-  const state = await getWatchPayload(sessionId, userProfileId);
+export async function skipWatchRest(sessionId: string, userProfileId?: string, db: WatchDatabase = prisma) {
+  const state = await getWatchPayload(sessionId, userProfileId, db);
   if (!state) return null;
-  const latestCompletedSet = await prisma.workoutSet.findFirst({
+  const latestCompletedSet = await db.workoutSet.findFirst({
     where: { workoutSessionId: state.sessionId, isCompleted: true, completedAt: { not: null } },
     orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
   });
   if (latestCompletedSet) {
-    await prisma.workoutSet.update({
+    await db.workoutSet.update({
       where: { id: latestCompletedSet.id },
       data: { restSeconds: 0 },
     });
@@ -477,10 +480,10 @@ export async function skipWatchRest(sessionId: string, userProfileId?: string) {
   return { ...state, restRemaining: 0 };
 }
 
-export async function adjustWatchRest(sessionId: string, deltaSeconds: number, userProfileId?: string) {
-  const state = await getWatchPayload(sessionId, userProfileId);
+export async function adjustWatchRest(sessionId: string, deltaSeconds: number, userProfileId?: string, db: WatchDatabase = prisma) {
+  const state = await getWatchPayload(sessionId, userProfileId, db);
   if (!state) return null;
-  const latestCompletedSet = await prisma.workoutSet.findFirst({
+  const latestCompletedSet = await db.workoutSet.findFirst({
     where: { workoutSessionId: state.sessionId, isCompleted: true, completedAt: { not: null } },
     orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
   });
@@ -489,20 +492,20 @@ export async function adjustWatchRest(sessionId: string, deltaSeconds: number, u
 
   const currentRest = Math.max(0, latestCompletedSet.restSeconds ?? 0);
   const nextRest = Math.max(0, Math.min(600, currentRest + Math.trunc(deltaSeconds)));
-  await prisma.workoutSet.update({
+  await db.workoutSet.update({
     where: { id: latestCompletedSet.id },
     data: { restSeconds: nextRest },
   });
 
-  return getWatchPayload(state.sessionId, userProfileId);
+  return getWatchPayload(state.sessionId, userProfileId, db);
 }
 
-export async function completeWatchSession(sessionId: string, userProfileId?: string) {
-  const state = await getWatchPayload(sessionId, userProfileId);
+export async function completeWatchSession(sessionId: string, userProfileId?: string, db: WatchDatabase = prisma) {
+  const state = await getWatchPayload(sessionId, userProfileId, db);
   if (!state) return null;
   const endedAt = new Date();
-  const started = await prisma.workoutSession.findUnique({ where: { id: state.sessionId }, select: { startedAt: true } });
-  await prisma.workoutSession.update({
+  const started = await db.workoutSession.findUnique({ where: { id: state.sessionId }, select: { startedAt: true } });
+  await db.workoutSession.update({
     where: { id: state.sessionId },
     data: {
       status: "COMPLETED",
@@ -510,10 +513,10 @@ export async function completeWatchSession(sessionId: string, userProfileId?: st
       durationSeconds: started?.startedAt ? Math.max(60, Math.floor((endedAt.getTime() - started.startedAt.getTime()) / 1000)) : null,
     },
   });
-  await prisma.watchSession.updateMany({
+  await db.watchSession.updateMany({
     where: { workoutSessionId: state.sessionId },
     data: { status: "COMPLETED", lastSyncAt: new Date() },
   });
-  const final = await getWatchPayload(state.sessionId, userProfileId);
+  const final = await getWatchPayload(state.sessionId, userProfileId, db);
   return final ? { ...final, status: "COMPLETED", restRemaining: 0 } : null;
 }
