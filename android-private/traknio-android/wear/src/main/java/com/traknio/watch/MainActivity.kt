@@ -81,7 +81,9 @@ private fun TraknioWearApp() {
         ?.status != "COMPLETED" && state is WatchScreenState.Ready
     KeepScreenOn(keepScreenOn)
     MaterialTheme {
-        WatchChrome {
+        WatchChrome(
+            compact = (state as? WatchScreenState.Ready)?.payload?.status == "COMPLETED",
+        ) {
             when (val current = state) {
                 WatchScreenState.Loading -> LoadingScreen()
                 is WatchScreenState.Empty -> EmptyScreen(current.message, viewModel::refresh)
@@ -107,7 +109,10 @@ private fun KeepScreenOn(enabled: Boolean) {
 }
 
 @Composable
-private fun WatchChrome(content: @Composable () -> Unit) {
+private fun WatchChrome(
+    compact: Boolean = false,
+    content: @Composable () -> Unit,
+) {
     Scaffold(
         timeText = { TimeText(modifier = Modifier.padding(top = 4.dp)) },
         vignette = { Vignette(vignettePosition = VignettePosition.TopAndBottom) },
@@ -124,7 +129,10 @@ private fun WatchChrome(content: @Composable () -> Unit) {
                         ),
                     ),
                 )
-                .padding(horizontal = 18.dp, vertical = 28.dp),
+                .padding(
+                    horizontal = 18.dp,
+                    vertical = if (compact) 10.dp else 28.dp,
+                ),
             contentAlignment = Alignment.Center,
         ) {
             content()
@@ -346,6 +354,7 @@ private fun CompletedScreen(state: WatchScreenState.Ready, onRefresh: () -> Unit
             .fillMaxSize()
             .background(Color(0xFF02040A)),
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Top,
         autoCentering = null,
     ) {
         item {
@@ -380,7 +389,7 @@ private fun CompletedScreen(state: WatchScreenState.Ready, onRefresh: () -> Unit
         item {
             Text(
                 text = "+${summary?.xpGained ?: 100} XP",
-                modifier = Modifier.padding(top = 3.dp),
+                modifier = Modifier.padding(top = 2.dp),
                 color = Color(0xFFC9B5FF),
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
@@ -391,7 +400,7 @@ private fun CompletedScreen(state: WatchScreenState.Ready, onRefresh: () -> Unit
                 text = finalSyncLabel(state),
                 color = finalSyncColor(state),
                 fontSize = 8.sp,
-                modifier = Modifier.padding(top = 2.dp),
+                modifier = Modifier.padding(top = 1.dp),
             )
         }
         if (summary != null) {
@@ -403,7 +412,7 @@ private fun CompletedScreen(state: WatchScreenState.Ready, onRefresh: () -> Unit
                     text = "${summary.sets} séries réalisées",
                     color = Color(0xFF8E9BB3),
                     fontSize = 8.sp,
-                    modifier = Modifier.padding(top = 4.dp),
+                    modifier = Modifier.padding(top = 2.dp),
                 )
             }
             if (summary.levelReached) {
@@ -417,11 +426,17 @@ private fun CompletedScreen(state: WatchScreenState.Ready, onRefresh: () -> Unit
             }
         }
         item {
-            Spacer(Modifier.height(5.dp))
-            FinalActionChip(
-                onClick = { activity?.finish() ?: onRefresh() },
-                enabled = state.busyAction == null,
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 3.dp, bottom = 14.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                FinalActionChip(
+                    onClick = { activity?.finish() ?: onRefresh() },
+                    enabled = state.busyAction == null,
+                )
+            }
         }
     }
 }
@@ -431,7 +446,7 @@ private fun SummaryGrid(summary: WatchSessionSummary) {
     Column(
         modifier = Modifier
             .fillMaxWidth(0.84f)
-            .padding(top = 8.dp),
+            .padding(top = 4.dp),
     ) {
         Row(
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -504,7 +519,7 @@ private fun SummaryCell(
     iconText: String? = null,
 ) {
     Column(
-        modifier = modifier.padding(vertical = 6.dp),
+        modifier = modifier.padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         if (icon != null) {
@@ -525,10 +540,11 @@ private fun SummaryCell(
 @Composable
 private fun FinalActionChip(onClick: () -> Unit, enabled: Boolean) {
     Chip(
-        modifier = Modifier.fillMaxWidth(0.56f),
+        modifier = Modifier.width(128.dp),
         label = {
             Text(
                 text = "Terminer",
+                modifier = Modifier.fillMaxWidth(),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
