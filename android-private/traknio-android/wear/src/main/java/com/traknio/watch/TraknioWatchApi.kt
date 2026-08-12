@@ -42,6 +42,10 @@ class TraknioWatchApi(
 
     suspend fun skipRest(sessionId: String): WatchPayload = postAction("skip-rest", "/api/watch/skip-rest", sessionId)
 
+    suspend fun pauseRest(sessionId: String): WatchPayload = postAction("pause-rest", "/api/watch/pause-rest", sessionId)
+
+    suspend fun resumeRest(sessionId: String): WatchPayload = postAction("resume-rest", "/api/watch/resume-rest", sessionId)
+
     suspend fun addRest(sessionId: String, seconds: Int): WatchPayload = postAction(
         operation = "adjust-rest",
         path = "/api/watch/adjust-rest",
@@ -195,6 +199,8 @@ class TraknioWatchApi(
             targetReps = json.optInt("targetReps", 10),
             weight = if (json.isNull("weight")) null else json.optDouble("weight"),
             restRemaining = json.optInt("restRemaining", 0),
+            restStatus = json.optString("restStatus", "IDLE"),
+            restUpdatedAt = json.optString("restUpdatedAt").takeIf { it.isNotBlank() },
             status = json.optString("status", "IN_PROGRESS"),
             summary = parseSummary(json.optJSONObject("summary")),
         )

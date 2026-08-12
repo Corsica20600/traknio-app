@@ -148,6 +148,8 @@ object WatchPayloadJson {
         targetReps = json.optInt("targetReps", 10),
         weight = if (json.isNull("weight")) null else json.optDouble("weight"),
         restRemaining = json.optInt("restRemaining", 0),
+        restStatus = json.optString("restStatus", "IDLE"),
+        restUpdatedAt = json.optString("restUpdatedAt").takeIf { it.isNotBlank() },
         status = json.optString("status", "IN_PROGRESS"),
         summary = json.optJSONObject("summary")?.let { summary ->
             WatchSessionSummary(

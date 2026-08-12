@@ -56,30 +56,22 @@ class WatchViewModel(context: Context) : ViewModel() {
     fun toggleRestPause() {
         val ready = _state.value as? WatchScreenState.Ready ?: return
         if (ready.busyAction != null) return
-
-        val pausedRemaining = ready.pausedRestRemaining
-        if (pausedRemaining != null) {
-            deadline = createRestDeadline(pausedRemaining)
-            _state.value = ready.copy(
-                displayRestRemaining = remainingFromDeadline(deadline),
-                pausedRestRemaining = null,
-                syncLabel = "Sync OK",
-                finishConfirm = false,
-                error = null,
-            )
-            return
+        if (ready.displayRestRemaining <= 0) return
+        if (ready.payload.restStatus == "PAUSED") {
+            perform("resume-rest") { payload -> api.resumeRest(payload.sessionId) }
+        } else {
+            // The API owns pause state so the phone and watch cannot drift apart.
+            perform("pause-rest", optimistic = {
+                deadline = null
+                val current = _state.value as? WatchScreenState.Ready
+                if (current != null) {
+                    _state.value = current.copy(
+                        pausedRestRemaining = current.displayRestRemaining,
+                        syncLabel = "Sync...",
+                    )
+                }
+            }) { payload -> api.pauseRest(payload.sessionId) }
         }
-
-        val remaining = remainingFromDeadline(deadline)
-        if (remaining <= 0) return
-        deadline = null
-        _state.value = ready.copy(
-            displayRestRemaining = remaining,
-            pausedRestRemaining = remaining,
-            syncLabel = "Pause",
-            finishConfirm = false,
-            error = null,
-        )
     }
 
     fun addRest() = perform("add-rest", optimistic = { addOptimisticRest(15) }) { payload ->
@@ -283,18 +275,19 @@ class WatchViewModel(context: Context) : ViewModel() {
         latestKey = nextKey
 
         val elapsedNow = SystemClock.elapsedRealtime()
-        val nextDeadline = createRestDeadline(payload.restRemaining, elapsedNow)
-        val currentPausedRest = (_state.value as? WatchScreenState.Ready)?.pausedRestRemaining
-        val effectivePausedRest = if (contextChanged) null else currentPausedRest
-        if (effectivePausedRest == null && shouldReplaceDeadline(deadline, nextDeadline, contextChanged, elapsedNow)) {
+        val isPaused = payload.restStatus == "PAUSED" && payload.restRemaining > 0
+        val nextDeadline = if (isPaused) null else createRestDeadline(payload.restRemaining, elapsedNow)
+        if (!isPaused && shouldReplaceDeadline(deadline, nextDeadline, contextChanged, elapsedNow)) {
             deadline = nextDeadline
+        } else if (isPaused) {
+            deadline = null
         }
 
         _state.value = WatchScreenState.Ready(
             payload = payload,
-            displayRestRemaining = effectivePausedRest ?: remainingFromDeadline(deadline, elapsedNow),
+            displayRestRemaining = if (isPaused) payload.restRemaining else remainingFromDeadline(deadline, elapsedNow),
             syncLabel = syncLabel,
-            pausedRestRemaining = effectivePausedRest,
+            pausedRestRemaining = if (isPaused) payload.restRemaining else null,
         )
     }
 

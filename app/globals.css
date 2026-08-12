@@ -2482,6 +2482,7 @@ h4,
   gap: 8px;
   align-items: center;
 }
+.rest-timer-card__actions { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .workout-sets-adjust strong {
   min-height: 44px;
   display: grid;

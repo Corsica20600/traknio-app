@@ -166,6 +166,8 @@ class PhoneWatchRelayClient(private val context: Context) {
             "validate-set" -> "/api/watch/validate-set"
             "skip-rest" -> "/api/watch/skip-rest"
             "adjust-rest" -> "/api/watch/adjust-rest"
+            "pause-rest" -> "/api/watch/pause-rest"
+            "resume-rest" -> "/api/watch/resume-rest"
             "next-exercise" -> "/api/watch/next-exercise"
             "previous-exercise" -> "/api/watch/previous-exercise"
             "complete-session" -> "/api/watch/complete-session"

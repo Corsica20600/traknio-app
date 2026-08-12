@@ -67,15 +67,16 @@ export async function POST(request: Request) {
     actualWeightKg: payload.actualWeightKg,
   });
 
-  const saved = existing
-    ? await prisma.workoutSet.update({
+  const saved = await prisma.$transaction(async (tx) => {
+    const completedSet = existing
+      ? await tx.workoutSet.update({
         where: { id: existing.id },
         data: {
           ...payload,
           ...(syncedProgramExerciseId ? { programExerciseId: syncedProgramExerciseId } : {}),
         },
       })
-    : await prisma.workoutSet.create({
+      : await tx.workoutSet.create({
         data: {
           workoutSessionId: sessionId,
           exerciseId,
@@ -85,20 +86,23 @@ export async function POST(request: Request) {
         },
       });
 
-  const exerciseFinished =
+    const exerciseFinished =
     Number.isFinite(totalSetsForExercise as number) &&
     (totalSetsForExercise as number) > 0 &&
-    saved.setIndex >= Math.floor(totalSetsForExercise as number);
-  const baseExerciseIndex = Number.isFinite(currentExerciseIndex as number) ? Math.max(0, Math.floor(currentExerciseIndex as number)) : 0;
-  const nextExerciseIndex = exerciseFinished ? baseExerciseIndex + 1 : baseExerciseIndex;
-  const nextSetIndex = exerciseFinished ? 1 : Math.max(1, saved.setIndex + 1);
+    completedSet.setIndex >= Math.floor(totalSetsForExercise as number);
+    const baseExerciseIndex = Number.isFinite(currentExerciseIndex as number) ? Math.max(0, Math.floor(currentExerciseIndex as number)) : 0;
+    const nextExerciseIndex = exerciseFinished ? baseExerciseIndex + 1 : baseExerciseIndex;
+    const nextSetIndex = exerciseFinished ? 1 : Math.max(1, completedSet.setIndex + 1);
 
-  await prisma.watchSession.upsert({
+    await tx.watchSession.upsert({
     where: { workoutSessionId: sessionId },
     update: {
       currentExerciseIndex: nextExerciseIndex,
       currentSetIndex: nextSetIndex,
       status: "ACTIVE",
+      restStatus: payload.restSeconds > 0 ? "ACTIVE" : "IDLE",
+      restRemainingSeconds: payload.restSeconds,
+      restUpdatedAt: new Date(),
       lastSyncAt: new Date(),
     },
     create: {
@@ -106,8 +110,13 @@ export async function POST(request: Request) {
       currentExerciseIndex: nextExerciseIndex,
       currentSetIndex: nextSetIndex,
       status: "ACTIVE",
+      restStatus: payload.restSeconds > 0 ? "ACTIVE" : "IDLE",
+      restRemainingSeconds: payload.restSeconds,
+      restUpdatedAt: new Date(),
       lastSyncAt: new Date(),
     },
+    });
+    return completedSet;
   });
 
   return NextResponse.json({

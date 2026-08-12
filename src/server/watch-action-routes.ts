@@ -4,7 +4,9 @@ import {
   adjustWatchRest,
   completeWatchSession,
   nextWatchExercise,
+  pauseWatchRest,
   previousWatchExercise,
+  resumeWatchRest,
   skipWatchRest,
   validateWatchSet,
 } from "@/src/server/watch-mobile";
@@ -13,7 +15,7 @@ import { runIdempotentWatchAction, type WatchActionOperation, type WatchActionRe
 type WatchAccess = { userProfileId?: string };
 
 function revalidateWatchPaths(operation: WatchActionOperation) {
-  if (["validate-set", "skip-rest", "adjust-rest", "complete-session"].includes(operation)) {
+  if (["validate-set", "skip-rest", "adjust-rest", "pause-rest", "resume-rest", "complete-session"].includes(operation)) {
     revalidatePath("/workout");
     revalidatePath("/dashboard");
     revalidatePath("/history");
@@ -57,6 +59,8 @@ export async function executeWatchActionRoute(input: {
             }, tx);
           case "skip-rest": return skipWatchRest(sessionId, userProfileId, tx);
           case "adjust-rest": return adjustWatchRest(sessionId, Number.isFinite(canonicalPayload.deltaSeconds) ? canonicalPayload.deltaSeconds! : 0, userProfileId, tx);
+          case "pause-rest": return pauseWatchRest(sessionId, userProfileId, tx);
+          case "resume-rest": return resumeWatchRest(sessionId, userProfileId, tx);
           case "next-exercise": return nextWatchExercise(sessionId, userProfileId, tx);
           case "previous-exercise": return previousWatchExercise(sessionId, userProfileId, tx);
           case "complete-session": return completeWatchSession(sessionId, userProfileId, tx);

@@ -10,6 +10,8 @@ data class WatchPayload(
     val targetReps: Int,
     val weight: Double?,
     val restRemaining: Int,
+    val restStatus: String,
+    val restUpdatedAt: String?,
     val status: String,
     val summary: WatchSessionSummary? = null,
 )

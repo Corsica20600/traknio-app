@@ -15,6 +15,7 @@ export async function POST(request: Request) {
     currentExerciseIndex: body.currentExerciseIndex == null ? undefined : Number(body.currentExerciseIndex),
     currentSetIndex: body.currentSetIndex == null ? undefined : Number(body.currentSetIndex),
     restRemaining: body.restRemaining == null ? undefined : Number(body.restRemaining),
+    restStatus: body.restStatus,
     status: body.status,
     lastSyncAt: body.lastSyncAt,
     userProfileId: access.userProfileId,

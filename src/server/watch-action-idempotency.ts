@@ -6,6 +6,8 @@ export type WatchActionOperation =
   | "validate-set"
   | "skip-rest"
   | "adjust-rest"
+  | "pause-rest"
+  | "resume-rest"
   | "next-exercise"
   | "previous-exercise"
   | "complete-session";

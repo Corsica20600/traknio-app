@@ -91,6 +91,12 @@ enum WatchSessionStatus {
   COMPLETED
 }
 
+enum RestTimerStatus {
+  IDLE
+  ACTIVE
+  PAUSED
+}
+
 enum WatchActionReceiptStatus {
   IN_PROGRESS
   COMPLETED
@@ -559,6 +565,9 @@ model WatchSession {
   currentExerciseIndex Int                @default(0)
   currentSetIndex      Int                @default(1)
   status               WatchSessionStatus @default(ACTIVE)
+  restStatus           RestTimerStatus    @default(IDLE)
+  restRemainingSeconds Int                @default(0)
+  restUpdatedAt        DateTime?
   lastSyncAt           DateTime           @default(now())
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt

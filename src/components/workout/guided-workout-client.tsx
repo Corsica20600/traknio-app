@@ -132,6 +132,8 @@ export function GuidedWorkoutClient({
   const [restChoice, setRestChoice] = useState(initialRestChoice);
   const [restRemaining, setRestRemaining] = useState(0);
   const [restEndsAt, setRestEndsAt] = useState<number | null>(null);
+  const [restPaused, setRestPaused] = useState(false);
+  const [restSyncPending, setRestSyncPending] = useState(false);
   const [completedSets, setCompletedSets] = useState<CompletedSet[]>(
     existingSets.map((item) => ({
       id: item.id,
@@ -174,6 +176,7 @@ export function GuidedWorkoutClient({
   const surfaceTapReadyAtRef = useRef<number>(0);
   const setValidationInFlightRef = useRef(false);
   const restActionInFlightRef = useRef(false);
+  const pendingRestActionRef = useRef<{ requestId: string; operation: "pause" | "resume" } | null>(null);
 
   const computeRemainingFromEndsAt = useCallback((endsAt: number) => {
     return Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
@@ -182,6 +185,7 @@ export function GuidedWorkoutClient({
   const clearRestTimer = useCallback(() => {
     setRestEndsAt(null);
     setRestRemaining(0);
+    setRestPaused(false);
   }, []);
 
   const startRestTimer = useCallback((restDurationSeconds: number) => {
@@ -192,6 +196,7 @@ export function GuidedWorkoutClient({
     }
     const restStartedAt = Date.now();
     const endsAt = restStartedAt + duration * 1000;
+    setRestPaused(false);
     setRestEndsAt(endsAt);
     setRestRemaining(computeRemainingFromEndsAt(endsAt));
   }, [clearRestTimer, computeRemainingFromEndsAt]);
@@ -208,18 +213,22 @@ export function GuidedWorkoutClient({
     }
   }, []);
 
-  const pushSyncState = useCallback((nextExerciseIndex: number, nextSetIndex: number, nextRest: number, status: "ACTIVE" | "PAUSED" | "COMPLETED" = "ACTIVE") => {
+  const pushSyncState = useCallback((nextExerciseIndex: number, nextSetIndex: number, nextRest?: number, status: "ACTIVE" | "PAUSED" | "COMPLETED" = "ACTIVE") => {
+    const body: Record<string, unknown> = {
+      workoutSessionId: sessionId,
+      currentExerciseIndex: Math.max(0, nextExerciseIndex),
+      currentSetIndex: Math.max(1, nextSetIndex),
+      status,
+      lastSyncAt: new Date().toISOString(),
+    };
+    if (Number.isFinite(nextRest)) {
+      body.restRemaining = Math.max(0, nextRest as number);
+      body.restStatus = nextRest && nextRest > 0 ? "ACTIVE" : "IDLE";
+    }
     void fetch("/api/watch/syncWorkoutState", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        workoutSessionId: sessionId,
-        currentExerciseIndex: Math.max(0, nextExerciseIndex),
-        currentSetIndex: Math.max(1, nextSetIndex),
-        status,
-        lastSyncAt: new Date().toISOString(),
-        restRemaining: Math.max(0, nextRest),
-      }),
+      body: JSON.stringify(body),
     });
   }, [sessionId]);
 
@@ -272,7 +281,7 @@ export function GuidedWorkoutClient({
   }, [exercises]);
 
   useEffect(() => {
-    if (restEndsAt == null) return;
+    if (restEndsAt == null || restPaused) return;
     const refresh = () => {
       const remainingSeconds = computeRemainingFromEndsAt(restEndsAt);
       setRestRemaining(remainingSeconds);
@@ -290,7 +299,7 @@ export function GuidedWorkoutClient({
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [restEndsAt, computeRemainingFromEndsAt]);
+  }, [restEndsAt, restPaused, computeRemainingFromEndsAt]);
 
   useEffect(() => {
     if (!startedAt) return;
@@ -392,12 +401,13 @@ export function GuidedWorkoutClient({
             setIndex?: number;
             totalSets?: number;
             restRemaining?: number;
+            restStatus?: "IDLE" | "ACTIVE" | "PAUSED";
             status?: string;
           };
         };
         const state = data.payload;
 
-        if (!alive || !state || setValidationInFlightRef.current || restActionInFlightRef.current) return;
+        if (!alive || !state || setValidationInFlightRef.current || restActionInFlightRef.current || pendingRestActionRef.current) return;
         if (state.status === "COMPLETED") {
           clearRestTimer();
           setEnding(true);
@@ -428,7 +438,8 @@ export function GuidedWorkoutClient({
         const exerciseIndexFromWatch = Math.max(1, Number(state.exerciseIndex ?? 1)) - 1;
         const setIndexFromWatch = Math.max(1, Number(state.setIndex ?? 1));
         const restFromWatch = Math.max(0, Number(state.restRemaining ?? 0));
-        const guard = `${exerciseIndexFromWatch}:${setIndexFromWatch}:${restFromWatch}`;
+        const restStatus = state.restStatus === "PAUSED" ? "PAUSED" : restFromWatch > 0 ? "ACTIVE" : "IDLE";
+        const guard = `${exerciseIndexFromWatch}:${setIndexFromWatch}:${restFromWatch}:${restStatus}`;
         if (lastSyncedWatchPositionRef.current === guard) return;
         lastSyncedWatchPositionRef.current = guard;
 
@@ -437,6 +448,7 @@ export function GuidedWorkoutClient({
           return prev === next ? prev : next;
         });
         setRestChoice(getPlannedRestForIndex(exerciseIndexFromWatch));
+        setRestPaused(restStatus === "PAUSED");
         setRestRemaining(() => {
           if (restFromWatch === 0 && skipRestRequestedRef.current) {
             skipRestRequestedRef.current = false;
@@ -444,7 +456,7 @@ export function GuidedWorkoutClient({
           }
           return restFromWatch;
         });
-        if (restFromWatch > 0) {
+        if (restFromWatch > 0 && restStatus !== "PAUSED") {
           const syncedEndsAt = Date.now() + restFromWatch * 1000;
           setRestEndsAt(syncedEndsAt);
         } else {
@@ -577,33 +589,28 @@ export function GuidedWorkoutClient({
       const optimisticExerciseIndex = isLastSetForExercise
         ? Math.max(0, Math.min(exercises.length - 1, exerciseIndex + 1))
         : exerciseIndex;
-      const optimisticSetIndex = isLastSetForExercise ? 1 : (setIndex + 1);
       if (isLastSetForExercise && exerciseIndex < exercises.length - 1) {
         setExerciseIndex(optimisticExerciseIndex);
         setRestChoice(getPlannedRestForIndex(optimisticExerciseIndex));
       }
-      pushSyncState(
-        optimisticExerciseIndex,
-        optimisticSetIndex,
-        validatedRestSeconds,
-        isLastSetForExercise && exerciseIndex >= exercises.length - 1 ? "PAUSED" : "ACTIVE",
-      );
       try {
         const strictStateRes = await fetch(`/api/watch/current-session?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" });
         if (strictStateRes.ok) {
           const strictData = await strictStateRes.json() as {
-            payload?: { exerciseIndex?: number; setIndex?: number; restRemaining?: number };
+            payload?: { exerciseIndex?: number; setIndex?: number; restRemaining?: number; restStatus?: "IDLE" | "ACTIVE" | "PAUSED" };
           };
           const strictState = strictData.payload;
           if (!strictState) return;
           let strictExerciseIndex = Math.max(1, Number(strictState.exerciseIndex ?? 1)) - 1;
           const strictSetIndex = Math.max(1, Number(strictState.setIndex ?? (setIndex + 1)));
           const strictRest = Math.max(0, Number(strictState.restRemaining ?? validatedRestSeconds));
+          const strictRestStatus = strictState.restStatus === "PAUSED" ? "PAUSED" : strictRest > 0 ? "ACTIVE" : "IDLE";
           if (isLastSetForExercise && strictExerciseIndex < optimisticExerciseIndex) {
             strictExerciseIndex = optimisticExerciseIndex;
           }
           setExerciseIndex(Math.max(0, Math.min(exercises.length - 1, strictExerciseIndex)));
           setRestChoice(getPlannedRestForIndex(strictExerciseIndex));
+          setRestPaused(strictRestStatus === "PAUSED");
           setRestRemaining(() => {
             if (strictRest === 0 && skipRestRequestedRef.current) {
               skipRestRequestedRef.current = false;
@@ -611,7 +618,7 @@ export function GuidedWorkoutClient({
             }
             return strictRest;
           });
-          if (strictRest > 0) {
+          if (strictRest > 0 && strictRestStatus !== "PAUSED") {
             const strictEndsAt = Date.now() + strictRest * 1000;
             setRestEndsAt(strictEndsAt);
           } else {
@@ -679,7 +686,6 @@ export function GuidedWorkoutClient({
     prevRestRemainingRef.current = 0;
     clearRestTimer();
     lastSyncedWatchPositionRef.current = `${exerciseIndex}:${Math.max(1, nextSetIndex)}:0`;
-    pushSyncState(exerciseIndex, Math.max(1, nextSetIndex), 0);
     try {
       const response = await fetch("/api/watch/skip-rest", {
         method: "POST",
@@ -702,8 +708,10 @@ export function GuidedWorkoutClient({
     unlockRestAudio();
     const currentRemaining = Math.max(0, restRemaining);
     const optimisticRemaining = Math.max(0, currentRemaining + deltaSeconds);
-    if (optimisticRemaining > 0) {
+    if (optimisticRemaining > 0 && !restPaused) {
       startRestTimer(optimisticRemaining);
+    } else if (optimisticRemaining > 0) {
+      setRestRemaining(optimisticRemaining);
     } else {
       clearRestTimer();
       skipRestRequestedRef.current = true;
@@ -719,11 +727,16 @@ export function GuidedWorkoutClient({
       if (!response.ok) throw new Error("adjust_rest_failed");
 
       const data = await response.json() as {
-        payload?: { restRemaining?: number; exerciseIndex?: number; setIndex?: number };
+        payload?: { restRemaining?: number; restStatus?: "IDLE" | "ACTIVE" | "PAUSED"; exerciseIndex?: number; setIndex?: number };
       };
       const serverRemaining = Math.max(0, Number(data.payload?.restRemaining ?? optimisticRemaining));
-      if (serverRemaining > 0) {
+      const serverRestStatus = data.payload?.restStatus === "PAUSED" ? "PAUSED" : serverRemaining > 0 ? "ACTIVE" : "IDLE";
+      setRestPaused(serverRestStatus === "PAUSED");
+      if (serverRemaining > 0 && serverRestStatus !== "PAUSED") {
         startRestTimer(serverRemaining);
+      } else if (serverRemaining > 0) {
+        setRestEndsAt(null);
+        setRestRemaining(serverRemaining);
       } else {
         clearRestTimer();
       }
@@ -736,6 +749,80 @@ export function GuidedWorkoutClient({
       setIsRestActionPending(false);
     }
   }
+
+  const applyRestPayload = useCallback((payload: { restRemaining?: number; restStatus?: "IDLE" | "ACTIVE" | "PAUSED" }) => {
+    const remaining = Math.max(0, Number(payload.restRemaining ?? 0));
+    const status = payload.restStatus === "PAUSED" ? "PAUSED" : remaining > 0 ? "ACTIVE" : "IDLE";
+    setRestPaused(status === "PAUSED");
+    if (remaining > 0 && status !== "PAUSED") {
+      startRestTimer(remaining);
+    } else if (remaining > 0) {
+      setRestEndsAt(null);
+      setRestRemaining(remaining);
+    } else {
+      clearRestTimer();
+    }
+  }, [clearRestTimer, startRestTimer]);
+
+  const submitRestPauseAction = useCallback(async (action: { requestId: string; operation: "pause" | "resume" }) => {
+    restActionInFlightRef.current = true;
+    setIsRestActionPending(true);
+    try {
+      const response = await fetch(`/api/watch/${action.operation === "pause" ? "pause-rest" : "resume-rest"}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-traknio-action-id": action.requestId,
+        },
+        body: JSON.stringify({ sessionId }),
+      });
+      if (!response.ok) throw new Error("rest_pause_sync_failed");
+      const data = await response.json() as { payload?: { restRemaining?: number; restStatus?: "IDLE" | "ACTIVE" | "PAUSED" } };
+      applyRestPayload(data.payload ?? {});
+      pendingRestActionRef.current = null;
+      setRestSyncPending(false);
+    } catch {
+      // Keep the requested state visible and retry exactly the same idempotency key on reconnect.
+      setRestSyncPending(true);
+    } finally {
+      restActionInFlightRef.current = false;
+      setIsRestActionPending(false);
+    }
+  }, [applyRestPayload, sessionId]);
+
+  function onToggleRestPause() {
+    if (restActionInFlightRef.current || restRemaining <= 0) return;
+    unlockRestAudio();
+    const pending = pendingRestActionRef.current;
+    const action = pending ?? {
+      requestId: typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      operation: restPaused ? "resume" as const : "pause" as const,
+    };
+    pendingRestActionRef.current = action;
+    setRestSyncPending(false);
+
+    if (action.operation === "pause") {
+      setRestPaused(true);
+      setRestEndsAt(null);
+    } else {
+      setRestPaused(false);
+      startRestTimer(restRemaining);
+    }
+    void submitRestPauseAction(action);
+  }
+
+  useEffect(() => {
+    const retryPendingRestAction = () => {
+      const pending = pendingRestActionRef.current;
+      if (pending && !restActionInFlightRef.current) {
+        void submitRestPauseAction(pending);
+      }
+    };
+    window.addEventListener("online", retryPendingRestAction);
+    return () => window.removeEventListener("online", retryPendingRestAction);
+  }, [submitRestPauseAction]);
 
   async function openReplacementPanel() {
     unlockRestAudio();
@@ -981,7 +1068,10 @@ export function GuidedWorkoutClient({
           nextLabel={`Ensuite: ${exercise.nameFr || exercise.name} · cible ${currentSetTargetReps} reps`}
           onAdd15={() => void onAdjustRest(15)}
           onRemove15={() => void onAdjustRest(-15)}
+          onTogglePause={onToggleRestPause}
           onSkip={onSkipRest}
+          isPaused={restPaused}
+          syncPending={restSyncPending}
           restActionPending={isRestActionPending}
         />
         <NextExerciseCard exercise={nextExercise} />

@@ -15,6 +15,9 @@ export type WorkoutStatePayload = {
     currentExerciseIndex: number;
     currentSetIndex: number;
     lastSyncAt: string;
+    restStatus: "IDLE" | "ACTIVE" | "PAUSED";
+    restRemainingSeconds: number;
+    restUpdatedAt: string | null;
   };
   exercises: Array<{
     exerciseId: string;
@@ -111,6 +114,9 @@ export async function getCurrentWorkoutStateForProfile(workoutSessionId: string,
       currentExerciseIndex: deviceSession.currentExerciseIndex,
       currentSetIndex: deviceSession.currentSetIndex,
       lastSyncAt: deviceSession.lastSyncAt.toISOString(),
+      restStatus: deviceSession.restStatus,
+      restRemainingSeconds: deviceSession.restRemainingSeconds,
+      restUpdatedAt: deviceSession.restUpdatedAt?.toISOString() ?? null,
     },
     exercises,
     totals,
@@ -230,6 +236,7 @@ export async function syncWorkoutState(input: {
   currentExerciseIndex?: number;
   currentSetIndex?: number;
   restRemaining?: number;
+  restStatus?: "IDLE" | "ACTIVE" | "PAUSED";
   status?: "ACTIVE" | "PAUSED" | "COMPLETED";
   lastSyncAt?: string;
   userProfileId?: string;
@@ -264,20 +271,12 @@ export async function syncWorkoutState(input: {
   });
 
   if (Number.isFinite(input.restRemaining)) {
-    const latestCompletedSet = await prisma.workoutSet.findFirst({
-      where: { workoutSessionId: input.workoutSessionId, isCompleted: true, completedAt: { not: null } },
-      orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
-      select: { id: true, completedAt: true },
+    const restRemainingSeconds = Math.max(0, Math.min(600, Math.floor(input.restRemaining as number)));
+    const restStatus = restRemainingSeconds <= 0 ? "IDLE" : input.restStatus === "PAUSED" ? "PAUSED" : "ACTIVE";
+    await prisma.watchSession.update({
+      where: { id: fallback.id },
+      data: { restStatus, restRemainingSeconds, restUpdatedAt: new Date(), lastSyncAt: new Date() },
     });
-
-    if (latestCompletedSet?.completedAt) {
-      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - latestCompletedSet.completedAt.getTime()) / 1000));
-      const nextRemaining = Math.max(0, Math.min(600, Math.floor(input.restRemaining as number)));
-      await prisma.workoutSet.update({
-        where: { id: latestCompletedSet.id },
-        data: { restSeconds: Math.min(600, elapsedSeconds + nextRemaining) },
-      });
-    }
   }
 
   return getCurrentWorkoutStateForProfile(input.workoutSessionId, input.userProfileId);
