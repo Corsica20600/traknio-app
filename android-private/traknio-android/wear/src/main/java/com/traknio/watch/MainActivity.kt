@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -30,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -51,6 +53,7 @@ import androidx.wear.compose.material.TimeText
 import androidx.wear.compose.material.Vignette
 import androidx.wear.compose.material.VignettePosition
 import androidx.compose.runtime.collectAsState
+import com.traknio.watch.R
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -339,56 +342,86 @@ private fun CompletedScreen(state: WatchScreenState.Ready, onRefresh: () -> Unit
     val activity = LocalContext.current as? Activity
     val summary = state.payload.summary
     ScalingLazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF02040A)),
         horizontalAlignment = Alignment.CenterHorizontally,
+        autoCentering = null,
     ) {
         item {
-            Text("Séance terminée", fontSize = 15.sp, color = Color(0xFF56F0C2), fontWeight = FontWeight.Black)
+            androidx.compose.foundation.Image(
+                painter = painterResource(R.drawable.traknio_watch_mark_exact),
+                contentDescription = "Traknio",
+                modifier = Modifier
+                    .padding(top = 2.dp)
+                    .size(width = 28.dp, height = 16.dp),
+            )
+        }
+        item {
+            Text(
+                text = "SÉANCE",
+                color = Color(0xFFB7C9EA),
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Black,
+            )
         }
         item {
             Text(
                 state.payload.workoutTitle.cleanExerciseTitle(),
-                modifier = Modifier.fillMaxWidth(0.82f),
+                modifier = Modifier.fillMaxWidth(0.78f),
                 textAlign = TextAlign.Center,
-                fontSize = 17.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Black,
                 maxLines = 2,
+                lineHeight = 15.sp,
                 overflow = TextOverflow.Ellipsis,
             )
         }
         item {
-            Box(
-                modifier = Modifier
-                    .padding(top = 5.dp)
-                    .background(Color(0xFF173F35), RoundedCornerShape(14.dp))
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-            ) {
-                Text("+${summary?.xpGained ?: 100} XP", color = Color(0xFF8DFFD2), fontSize = 11.sp, fontWeight = FontWeight.Black)
-            }
+            Text(
+                text = "+${summary?.xpGained ?: 100} XP",
+                modifier = Modifier.padding(top = 3.dp),
+                color = Color(0xFFC9B5FF),
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+            )
         }
         item {
-            Text(finalSyncLabel(state), color = finalSyncColor(state), fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
+            Text(
+                text = finalSyncLabel(state),
+                color = finalSyncColor(state),
+                fontSize = 8.sp,
+                modifier = Modifier.padding(top = 2.dp),
+            )
         }
         if (summary != null) {
             item {
                 SummaryGrid(summary)
             }
             item {
-                Text("${summary.sets} séries réalisées", color = Color(0xFFB7C9EA), fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                Text(
+                    text = "${summary.sets} séries réalisées",
+                    color = Color(0xFF8E9BB3),
+                    fontSize = 8.sp,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
             }
             if (summary.levelReached) {
                 item {
-                    Text("Niveau ${summary.level} atteint", color = Color(0xFFC9B5FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("Niveau ${summary.level} atteint", color = Color(0xFFC9B5FF), fontSize = 8.sp, fontWeight = FontWeight.Bold)
                 }
             }
         } else {
             item {
-                Text("Synthèse en cours...", color = Color(0xFFB7C9EA), fontSize = 12.sp, textAlign = TextAlign.Center)
+                Text("Synthèse en cours...", color = Color(0xFFB7C9EA), fontSize = 10.sp, textAlign = TextAlign.Center)
             }
         }
         item {
-            Spacer(Modifier.height(6.dp))
-            ActionChip("Terminer", onClick = { activity?.finish() ?: onRefresh() }, enabled = state.busyAction == null)
+            Spacer(Modifier.height(5.dp))
+            FinalActionChip(
+                onClick = { activity?.finish() ?: onRefresh() },
+                enabled = state.busyAction == null,
+            )
         }
     }
 }
@@ -397,35 +430,117 @@ private fun CompletedScreen(state: WatchScreenState.Ready, onRefresh: () -> Unit
 private fun SummaryGrid(summary: WatchSessionSummary) {
     Column(
         modifier = Modifier
-            .fillMaxWidth(0.92f)
-            .padding(top = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(5.dp),
+            .fillMaxWidth(0.84f)
+            .padding(top = 8.dp),
     ) {
-        Row(horizontalArrangement = Arrangement.SpaceBetween) {
-            SummaryTile("Durée", formatDuration(summary.durationSeconds), Modifier.fillMaxWidth(0.48f))
-            SummaryTile("Volume", "${summary.volumeKg} kg", Modifier.fillMaxWidth(0.48f))
+        Row(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SummaryCell(
+                icon = R.drawable.ic_summary_exercises,
+                iconColor = Color(0xFF00E0FF),
+                value = "${summary.exercises}",
+                label = "EXERCICES",
+                modifier = Modifier.width(80.dp),
+            )
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(42.dp)
+                    .background(Color(0xFF26334D)),
+            )
+            SummaryCell(
+                icon = R.drawable.ic_summary_volume,
+                iconColor = Color(0xFF00C7FF),
+                value = formatFrenchNumber(summary.volumeKg),
+                label = "KG TOTAL",
+                modifier = Modifier.width(80.dp),
+            )
         }
-        Row(horizontalArrangement = Arrangement.SpaceBetween) {
-            SummaryTile("Exercices", "${summary.exercises}", Modifier.fillMaxWidth(0.48f))
-            SummaryTile("FC moy.", summary.averageHeartRateBpm?.let { "$it bpm" } ?: "—", Modifier.fillMaxWidth(0.48f))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(Color(0xFF26334D)),
+        )
+        Row(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SummaryCell(
+                icon = null,
+                iconText = "♥",
+                iconColor = Color(0xFFFF4D88),
+                value = summary.averageHeartRateBpm?.toString() ?: "—",
+                label = "FC MOY.",
+                modifier = Modifier.width(80.dp),
+            )
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(42.dp)
+                    .background(Color(0xFF26334D)),
+            )
+            SummaryCell(
+                icon = null,
+                iconText = "◷",
+                iconColor = Color(0xFF00E0FF),
+                value = formatDuration(summary.durationSeconds),
+                label = "DURÉE",
+                modifier = Modifier.width(80.dp),
+            )
         }
     }
 }
 
 @Composable
-private fun SummaryTile(label: String, value: String, modifier: Modifier) {
-    Row(
-        modifier = modifier
-            .background(Color(0xFF0B1832), RoundedCornerShape(12.dp))
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
+private fun SummaryCell(
+    icon: Int?,
+    iconColor: Color,
+    value: String,
+    label: String,
+    modifier: Modifier,
+    iconText: String? = null,
+) {
+    Column(
+        modifier = modifier.padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, color = Color(0xFFB7C9EA), fontSize = 8.sp, maxLines = 1)
-            Text(value, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black, maxLines = 1)
+        if (icon != null) {
+            androidx.compose.foundation.Image(
+                painter = painterResource(icon),
+                contentDescription = null,
+                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(iconColor),
+                modifier = Modifier.size(13.dp),
+            )
+        } else {
+            Text(iconText.orEmpty(), color = iconColor, fontSize = 12.sp, fontWeight = FontWeight.Black)
         }
+        Text(value, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black, maxLines = 1)
+        Text(label, color = Color(0xFF8E9BB3), fontSize = 7.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
+}
+
+@Composable
+private fun FinalActionChip(onClick: () -> Unit, enabled: Boolean) {
+    Chip(
+        modifier = Modifier.fillMaxWidth(0.56f),
+        label = {
+            Text(
+                text = "Terminer",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            )
+        },
+        enabled = enabled,
+        colors = ChipDefaults.primaryChipColors(
+            backgroundColor = Color(0xFF101829),
+            contentColor = Color(0xFFDFE8FB),
+        ),
+        onClick = onClick,
+    )
 }
 
 @Composable
@@ -590,4 +705,8 @@ private fun formatDuration(seconds: Int?): String {
     val hours = minutes / 60
     val remainingMinutes = minutes % 60
     return if (hours > 0) "${hours} h ${remainingMinutes.toString().padStart(2, '0')}" else "${minutes} min"
+}
+
+private fun formatFrenchNumber(value: Int): String {
+    return String.format(java.util.Locale.ROOT, "%,d", value).replace(',', ' ')
 }
