@@ -31,6 +31,8 @@ class WatchViewModel(context: Context) : ViewModel() {
     private var latestPayload: WatchPayload? = null
     private var latestKey: String? = null
     private var deadline: RestDeadline? = null
+    private var newestRestUpdatedAt: String? = null
+    private var restMutationPending = false
     private var pollingJob: Job? = null
     private var pairingInProgress = false
     private var lastAccountCheckElapsedMs = 0L
@@ -51,7 +53,13 @@ class WatchViewModel(context: Context) : ViewModel() {
 
     fun validateSet() = perform("validate") { payload -> api.validateSet(payload) }
 
-    fun skipRest() = perform("skip") { payload -> api.skipRest(payload.sessionId) }
+    fun skipRest() = perform(
+        "skip-rest",
+        optimistic = {
+            deadline = null
+            updateOptimisticRest(remainingSeconds = 0, paused = false)
+        },
+    ) { payload -> api.skipRest(payload.sessionId) }
 
     fun toggleRestPause() {
         val ready = _state.value as? WatchScreenState.Ready ?: return
@@ -63,13 +71,7 @@ class WatchViewModel(context: Context) : ViewModel() {
             // The API owns pause state so the phone and watch cannot drift apart.
             perform("pause-rest", optimistic = {
                 deadline = null
-                val current = _state.value as? WatchScreenState.Ready
-                if (current != null) {
-                    _state.value = current.copy(
-                        pausedRestRemaining = current.displayRestRemaining,
-                        syncLabel = "Sync...",
-                    )
-                }
+                updateOptimisticRest(ready.displayRestRemaining, paused = true)
             }) { payload -> api.pauseRest(payload.sessionId) }
         }
     }
@@ -119,6 +121,10 @@ class WatchViewModel(context: Context) : ViewModel() {
     }
 
     private suspend fun fetchState(silent: Boolean) {
+        // A background refresh must not overwrite an optimistic rest mutation before its
+        // direct or relayed acknowledgement has supplied the authoritative timestamp.
+        if (silent && restMutationPending) return
+
         val current = _state.value
         if (!silent && current is WatchScreenState.Ready) {
             _state.value = current.copy(syncLabel = "Sync...", error = null)
@@ -151,13 +157,15 @@ class WatchViewModel(context: Context) : ViewModel() {
         val ready = _state.value as? WatchScreenState.Ready ?: return
         if (ready.busyAction != null) return
 
+        val mutatesRest = actionId in REST_ACTIONS
+        if (mutatesRest) restMutationPending = true
         _state.value = ready.copy(busyAction = actionId, syncLabel = "Sync...", finishConfirm = false, error = null)
         optimistic?.invoke()
 
         viewModelScope.launch {
             try {
                 ensurePaired()
-                applyPayload(action(payload), syncLabel = "Sync OK")
+                applyPayload(action(payload), syncLabel = "Sync OK", confirmedRestMutation = mutatesRest)
             } catch (error: Throwable) {
                 if (error is WatchRelayQueuedException) {
                     val queued = _state.value as? WatchScreenState.Ready
@@ -169,6 +177,7 @@ class WatchViewModel(context: Context) : ViewModel() {
                     }
                     return@launch
                 }
+                if (mutatesRest) restMutationPending = false
                 if (isPairingRequired(error)) {
                     tokenStore.clear()
                     Log.i(TAG, "pairing required from backend; token cleared")
@@ -249,7 +258,7 @@ class WatchViewModel(context: Context) : ViewModel() {
             "SENDING" -> _state.value = ready.copy(syncLabel = "Envoi...", error = null)
             "WAITING_PHONE" -> _state.value = ready.copy(syncLabel = "Attente téléphone", error = null)
             "COMPLETED" -> result.payload?.let { payload ->
-                applyPayload(WatchPayloadJson.parse(payload), syncLabel = "Synchronisé")
+                applyPayload(WatchPayloadJson.parse(payload), syncLabel = "Synchronisé", confirmedRestMutation = true)
             }
             "QUEUED" -> _state.value = ready.copy(
                 syncLabel = "En attente réseau",
@@ -259,7 +268,9 @@ class WatchViewModel(context: Context) : ViewModel() {
                 busyAction = null,
                 syncLabel = "Échec",
                 error = result.error ?: "Synchronisation impossible",
-            )
+            ).also {
+                restMutationPending = false
+            }
         }
     }
 
@@ -268,7 +279,23 @@ class WatchViewModel(context: Context) : ViewModel() {
         super.onCleared()
     }
 
-    private fun applyPayload(payload: WatchPayload, syncLabel: String) {
+    private fun applyPayload(incoming: WatchPayload, syncLabel: String, confirmedRestMutation: Boolean = false) {
+        val currentPayload = latestPayload
+        val restSnapshotIsCurrent = confirmedRestMutation || currentPayload == null || currentPayload.sessionId != incoming.sessionId ||
+            (!restMutationPending && isRestSnapshotAtLeastAsRecent(newestRestUpdatedAt ?: currentPayload.restUpdatedAt, incoming.restUpdatedAt))
+        val payload = if (currentPayload != null && currentPayload.sessionId == incoming.sessionId && !restSnapshotIsCurrent) {
+            incoming.copy(
+                restRemaining = currentPayload.restRemaining,
+                restStatus = currentPayload.restStatus,
+                restUpdatedAt = currentPayload.restUpdatedAt,
+            )
+        } else {
+            incoming
+        }
+        if (restSnapshotIsCurrent && !payload.restUpdatedAt.isNullOrBlank()) {
+            newestRestUpdatedAt = payload.restUpdatedAt
+            restMutationPending = false
+        }
         latestPayload = payload
         val nextKey = "${payload.sessionId}:${payload.exerciseIndex}:${payload.setIndex}"
         val contextChanged = latestKey != nextKey
@@ -305,14 +332,39 @@ class WatchViewModel(context: Context) : ViewModel() {
         val ready = _state.value as? WatchScreenState.Ready
         val pausedRemaining = ready?.pausedRestRemaining
         val remaining = pausedRemaining ?: remainingFromDeadline(deadline, now)
-        val nextRemaining = (remaining + seconds).coerceAtLeast(0)
+        val nextRemaining = (remaining + seconds).coerceIn(0, 600)
         if (pausedRemaining != null) {
             deadline = null
-            _state.value = ready.copy(displayRestRemaining = nextRemaining, pausedRestRemaining = nextRemaining)
-            return
+            updateOptimisticRest(nextRemaining, paused = true)
+        } else {
+            deadline = createRestDeadline(nextRemaining, now)
+            updateOptimisticRest(nextRemaining, paused = false)
         }
-        deadline = createRestDeadline(nextRemaining, now)
-        updateDisplayRemaining()
+    }
+
+    private fun updateOptimisticRest(remainingSeconds: Int, paused: Boolean) {
+        val ready = _state.value as? WatchScreenState.Ready ?: return
+        val optimisticUpdatedAt = java.time.Instant.now().toString()
+        val updatedPayload = ready.payload.copy(
+            restRemaining = remainingSeconds,
+            restStatus = when {
+                remainingSeconds <= 0 -> "IDLE"
+                paused -> "PAUSED"
+                else -> "ACTIVE"
+            },
+            restUpdatedAt = optimisticUpdatedAt,
+        )
+        newestRestUpdatedAt = optimisticUpdatedAt
+        latestPayload = updatedPayload
+        _state.value = ready.copy(
+            payload = updatedPayload,
+            displayRestRemaining = remainingSeconds,
+            pausedRestRemaining = if (paused && remainingSeconds > 0) remainingSeconds else null,
+        )
+    }
+
+    private companion object {
+        val REST_ACTIONS = setOf("skip-rest", "pause-rest", "resume-rest", "add-rest", "remove-rest")
     }
 }
 

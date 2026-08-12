@@ -2,6 +2,7 @@ package com.traknio.watch
 
 data class WatchPayload(
     val sessionId: String,
+    val workoutTitle: String,
     val exerciseName: String,
     val exerciseIndex: Int,
     val totalExercises: Int,
@@ -9,6 +10,10 @@ data class WatchPayload(
     val totalSets: Int,
     val targetReps: Int,
     val weight: Double?,
+    val activeWeight: Double?,
+    val proposedWeight: Double?,
+    val weightConfirmationRequired: Boolean,
+    val isBodyweight: Boolean,
     val restRemaining: Int,
     val restStatus: String,
     val restUpdatedAt: String?,
@@ -19,8 +24,9 @@ data class WatchPayload(
 data class WatchSessionSummary(
     val durationSeconds: Int?,
     val volumeKg: Int,
+    val exercises: Int,
     val sets: Int,
-    val calories: Int?,
+    val averageHeartRateBpm: Int?,
     val xpGained: Int,
     val level: Int,
     val levelReached: Boolean,

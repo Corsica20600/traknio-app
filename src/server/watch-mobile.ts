@@ -9,6 +9,7 @@ const DEFAULT_REPS = [12, 10, 10];
 
 type WatchPayload = {
   sessionId: string;
+  workoutTitle: string;
   exerciseName: string;
   exerciseIndex: number;
   totalExercises: number;
@@ -16,6 +17,10 @@ type WatchPayload = {
   totalSets: number;
   targetReps: number;
   weight: number | null;
+  activeWeight: number | null;
+  proposedWeight: number | null;
+  weightConfirmationRequired: boolean;
+  isBodyweight: boolean;
   restRemaining: number;
   restStatus: "IDLE" | "ACTIVE" | "PAUSED";
   restUpdatedAt: string | null;
@@ -26,8 +31,9 @@ type WatchPayload = {
 type WatchSessionSummary = {
   durationSeconds: number | null;
   volumeKg: number;
+  exercises: number;
   sets: number;
-  calories: number | null;
+  averageHeartRateBpm: number | null;
   xpGained: number;
   level: number;
   levelReached: boolean;
@@ -41,6 +47,8 @@ type OrderedExercise = {
   targetReps: number;
   restSeconds: number;
   plannedWeightKg: number | null;
+  equipment: string[];
+  equipmentFr: string[];
 };
 
 type WatchDatabase = Prisma.TransactionClient | typeof prisma;
@@ -67,18 +75,25 @@ function getLevelFromXp(totalXp: number) {
   return level;
 }
 
-async function getLatestCalories(userProfileId: string, db: WatchDatabase) {
-  const metric = await db.progressMetric.findFirst({
-    where: {
-      userProfileId,
-      metricType: "PERFORMANCE",
-      unit: "kcal",
-      notes: { contains: "\"metric\":\"calories\"" },
-    },
-    orderBy: { measuredAt: "desc" },
-    select: { value: true },
-  });
-  return metric?.value == null ? null : Math.max(0, Math.round(metric.value));
+export type CompletedWatchSet = {
+  exerciseId: string;
+  actualReps: number | null;
+  actualWeightKg: number | null;
+};
+
+export function calculateCompletedWatchSessionStats(sets: CompletedWatchSet[]) {
+  const volumeKg = sets.reduce((total, set) => {
+    const reps = Math.max(0, set.actualReps ?? 0);
+    const weight = Math.max(0, set.actualWeightKg ?? 0);
+    // A bodyweight exercise has no external load, so it must not inflate volume.
+    return total + reps * weight;
+  }, 0);
+
+  return {
+    volumeKg: Math.round(volumeKg),
+    exercises: new Set(sets.map((set) => set.exerciseId)).size,
+    sets: sets.length,
+  };
 }
 
 async function getWatchSessionSummary(session: {
@@ -89,26 +104,27 @@ async function getWatchSessionSummary(session: {
 }, db: WatchDatabase): Promise<WatchSessionSummary | undefined> {
   if (session.status !== "COMPLETED") return undefined;
 
-  const [sets, completedSessionsCount, calories] = await Promise.all([
+  const [sets, completedSessionsCount] = await Promise.all([
     db.workoutSet.findMany({
       where: { workoutSessionId: session.id, isCompleted: true },
-      select: { actualReps: true, actualWeightKg: true },
+      select: { exerciseId: true, actualReps: true, actualWeightKg: true },
     }),
     db.workoutSession.count({
       where: { userProfileId: session.userProfileId, status: "COMPLETED" },
     }),
-    getLatestCalories(session.userProfileId, db),
   ]);
 
-  const volumeKg = sets.reduce((acc, set) => acc + (set.actualReps ?? 0) * (set.actualWeightKg ?? 0), 0);
+  const stats = calculateCompletedWatchSessionStats(sets);
   const previousLevel = getLevelFromXp(Math.max(0, completedSessionsCount - 1) * 100);
   const level = getLevelFromXp(completedSessionsCount * 100);
 
   return {
     durationSeconds: session.durationSeconds,
-    volumeKg: Math.round(volumeKg),
-    sets: sets.length,
-    calories,
+    volumeKg: stats.volumeKg,
+    exercises: stats.exercises,
+    sets: stats.sets,
+    // No session-scoped heart-rate average is persisted yet. Never reuse daily Health data here.
+    averageHeartRateBpm: null,
     xpGained: 100,
     level,
     levelReached: level > previousLevel,
@@ -122,7 +138,7 @@ async function resolveSession(sessionId?: string, userProfileId?: string, db: Wa
       include: {
         watchSession: true,
         sets: {
-          include: { exercise: { select: { id: true, slug: true, name: true, nameFr: true } } },
+          include: { exercise: { select: { id: true, slug: true, name: true, nameFr: true, equipment: true, equipmentFr: true } } },
           orderBy: [{ createdAt: "asc" }, { setIndex: "asc" }],
         },
       },
@@ -135,7 +151,7 @@ async function resolveSession(sessionId?: string, userProfileId?: string, db: Wa
     include: {
       watchSession: true,
       sets: {
-        include: { exercise: { select: { id: true, slug: true, name: true, nameFr: true } } },
+        include: { exercise: { select: { id: true, slug: true, name: true, nameFr: true, equipment: true, equipmentFr: true } } },
         orderBy: [{ createdAt: "asc" }, { setIndex: "asc" }],
       },
     },
@@ -149,7 +165,7 @@ async function getOrderedExercisesForSession(session: {
   programId: string | null;
   programDayId: string | null;
   notes: string | null;
-  sets: Array<{ exerciseId: string; exercise: { id: string; slug: string; name: string; nameFr: string | null } }>;
+  sets: Array<{ exerciseId: string; exercise: { id: string; slug: string; name: string; nameFr: string | null; equipment: string[]; equipmentFr: string[] } }>;
 }, db: WatchDatabase) {
   const latestWeightsRows = await db.workoutSet.findMany({
     where: {
@@ -178,7 +194,7 @@ async function getOrderedExercisesForSession(session: {
               orderBy: { orderIndex: "asc" },
               include: {
                 exercise: {
-                  select: { id: true, slug: true, name: true, nameFr: true },
+                  select: { id: true, slug: true, name: true, nameFr: true, equipment: true, equipmentFr: true },
                 },
               },
             },
@@ -206,6 +222,8 @@ async function getOrderedExercisesForSession(session: {
             targetReps: item.repsMin ?? item.repsMax ?? DEFAULT_REPS[0],
             restSeconds: item.restSeconds ?? 90,
             plannedWeightKg: parseWeightKgFromText(item.repsText) ?? latestWeightByExercise.get(effectiveExerciseId) ?? null,
+            equipment: effectiveExercise.equipment,
+            equipmentFr: effectiveExercise.equipmentFr,
           };
         });
         if (fromProgramDay.length > 0) return fromProgramDay;
@@ -224,6 +242,8 @@ async function getOrderedExercisesForSession(session: {
         targetReps: DEFAULT_REPS[0],
         restSeconds: 90,
         plannedWeightKg: latestWeightByExercise.get(set.exerciseId) ?? null,
+        equipment: set.exercise.equipment,
+        equipmentFr: set.exercise.equipmentFr,
       });
     }
   }
@@ -231,7 +251,7 @@ async function getOrderedExercisesForSession(session: {
 
   const fallback = await db.exercise.findMany({
     where: { isActive: true },
-    select: { id: true, slug: true, name: true, nameFr: true },
+    select: { id: true, slug: true, name: true, nameFr: true, equipment: true, equipmentFr: true },
     orderBy: [{ category: "asc" }, { name: "asc" }],
     take: 6,
   });
@@ -243,7 +263,16 @@ async function getOrderedExercisesForSession(session: {
     targetReps: DEFAULT_REPS[0],
     restSeconds: 90,
     plannedWeightKg: latestWeightByExercise.get(item.id) ?? null,
+    equipment: item.equipment,
+    equipmentFr: item.equipmentFr,
   }));
+}
+
+function isBodyweightExercise(exercise: Pick<OrderedExercise, "equipment" | "equipmentFr">) {
+  const equipment = [...exercise.equipment, ...exercise.equipmentFr]
+    .map((item) => item.trim().toLocaleLowerCase("fr-FR"))
+    .filter(Boolean);
+  return equipment.length > 0 && equipment.every((item) => ["poids du corps", "bodyweight", "body only", "aucun", "none"].includes(item));
 }
 
 export async function getWatchPayload(sessionId?: string, userProfileId?: string, db: WatchDatabase = prisma): Promise<WatchPayload | null> {
@@ -267,6 +296,14 @@ export async function getWatchPayload(sessionId?: string, userProfileId?: string
     where: { workoutSessionId: session.id, exerciseId: currentExercise.exerciseId, setIndex },
     orderBy: { createdAt: "desc" },
   });
+  const currentSetWeight = (latestSetForCurrent?.actualWeightKg ?? 0) > 0 ? latestSetForCurrent!.actualWeightKg! : null;
+  const liveTargetWeight = liveTarget?.exerciseId === currentExercise.exerciseId && liveTarget.setIndex === setIndex
+    ? liveTarget.targetWeightKg ?? null
+    : null;
+  const activeWeight = currentSetWeight ?? currentExercise.plannedWeightKg;
+  const proposedWeight = liveTargetWeight != null && liveTargetWeight > 0 && currentSetWeight !== liveTargetWeight
+    ? liveTargetWeight
+    : null;
   const watchRest = session.watchSession
     ? {
         status: session.watchSession.restStatus,
@@ -279,13 +316,18 @@ export async function getWatchPayload(sessionId?: string, userProfileId?: string
 
   return {
     sessionId: session.id,
+    workoutTitle: session.title,
     exerciseName: currentExercise.exerciseName,
     exerciseIndex: exerciseIndex + 1,
     totalExercises,
     setIndex: Math.min(setIndex, totalSets),
     totalSets,
     targetReps,
-    weight: latestSetForCurrent?.actualWeightKg ?? (liveTarget?.exerciseId === currentExercise.exerciseId && liveTarget.setIndex === setIndex ? liveTarget.targetWeightKg : null) ?? currentExercise.plannedWeightKg ?? null,
+    weight: currentSetWeight ?? liveTargetWeight ?? activeWeight ?? null,
+    activeWeight,
+    proposedWeight,
+    weightConfirmationRequired: proposedWeight != null,
+    isBodyweight: isBodyweightExercise(currentExercise),
     restRemaining,
     restStatus,
     restUpdatedAt: watchRest.updatedAt?.toISOString() ?? null,

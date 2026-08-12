@@ -122,4 +122,5 @@ dependencies {
     implementation("com.google.android.gms:play-services-wearable:19.0.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling:1.6.8")
+    testImplementation("junit:junit:4.13.2")
 }

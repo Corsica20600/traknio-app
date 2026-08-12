@@ -140,6 +140,7 @@ data class PhoneRelayResult(
 object WatchPayloadJson {
     fun parse(json: JSONObject): WatchPayload = WatchPayload(
         sessionId = json.getString("sessionId"),
+        workoutTitle = json.optString("workoutTitle", "Séance"),
         exerciseName = json.getString("exerciseName"),
         exerciseIndex = json.optInt("exerciseIndex", 1),
         totalExercises = json.optInt("totalExercises", 1),
@@ -147,6 +148,10 @@ object WatchPayloadJson {
         totalSets = json.optInt("totalSets", 1),
         targetReps = json.optInt("targetReps", 10),
         weight = if (json.isNull("weight")) null else json.optDouble("weight"),
+        activeWeight = if (json.isNull("activeWeight")) null else json.optDouble("activeWeight"),
+        proposedWeight = if (json.isNull("proposedWeight")) null else json.optDouble("proposedWeight"),
+        weightConfirmationRequired = json.optBoolean("weightConfirmationRequired", false),
+        isBodyweight = json.optBoolean("isBodyweight", false),
         restRemaining = json.optInt("restRemaining", 0),
         restStatus = json.optString("restStatus", "IDLE"),
         restUpdatedAt = json.optString("restUpdatedAt").takeIf { it.isNotBlank() },
@@ -155,8 +160,9 @@ object WatchPayloadJson {
             WatchSessionSummary(
                 durationSeconds = if (summary.isNull("durationSeconds")) null else summary.optInt("durationSeconds"),
                 volumeKg = summary.optInt("volumeKg", 0),
+                exercises = summary.optInt("exercises", 0),
                 sets = summary.optInt("sets", 0),
-                calories = if (summary.isNull("calories")) null else summary.optInt("calories"),
+                averageHeartRateBpm = if (summary.isNull("averageHeartRateBpm")) null else summary.optInt("averageHeartRateBpm"),
                 xpGained = summary.optInt("xpGained", 100),
                 level = summary.optInt("level", 1),
                 levelReached = summary.optBoolean("levelReached", false),

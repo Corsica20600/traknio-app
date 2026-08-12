@@ -6,6 +6,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -120,7 +121,7 @@ private fun WatchChrome(content: @Composable () -> Unit) {
                         ),
                     ),
                 )
-                .padding(horizontal = 18.dp, vertical = 18.dp),
+                .padding(horizontal = 18.dp, vertical = 28.dp),
             contentAlignment = Alignment.Center,
         ) {
             content()
@@ -203,7 +204,7 @@ private fun ReadyToCompleteScreen(state: WatchScreenState.Ready, viewModel: Watc
         Text("complète", fontSize = 25.sp, fontWeight = FontWeight.Black)
         Text(state.syncLabel, color = Color(0xFF56F0C2), fontSize = 12.sp)
         Spacer(Modifier.height(10.dp))
-        BigActionButton(if (state.busyAction == "finish") "..." else "Terminer", enabled, viewModel::completeSession)
+        BigActionButton(if (state.busyAction == "finish") "..." else "Terminer la séance", enabled, viewModel::completeSession)
     }
 }
 
@@ -239,18 +240,45 @@ private fun ActiveSetScreen(state: WatchScreenState.Ready, viewModel: WatchViewM
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
             )
-            Text(
-                text = payload.weight?.let { "${trimWeight(it)} kg" } ?: "Poids à confirmer",
-                color = Color(0xFFB7C9EA),
-                fontSize = 12.sp,
-            )
+            ActiveWeight(payload)
         }
 
         Spacer(Modifier.height(6.dp))
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             BigActionButton("Valider", enabled = enabled, onClick = viewModel::validateSet)
             Spacer(Modifier.height(5.dp))
-            FinishButton(state, viewModel)
+            FinishSessionChip(state, viewModel)
+        }
+    }
+}
+
+@Composable
+private fun ActiveWeight(payload: WatchPayload) {
+    val activeWeight = payload.activeWeight ?: payload.weight
+    Text("Charge active", color = Color(0xFF9CCBFF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+    Text(
+        text = when {
+            activeWeight != null && activeWeight > 0 -> "${trimWeight(activeWeight)} kg"
+            payload.isBodyweight -> "Poids du corps"
+            else -> "Charge à confirmer"
+        },
+        color = Color(0xFFEAF3FF),
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Bold,
+    )
+    if (payload.weightConfirmationRequired && payload.proposedWeight != null) {
+        Spacer(Modifier.height(3.dp))
+        Box(
+            modifier = Modifier
+                .background(Color(0xFF30215F), RoundedCornerShape(12.dp))
+                .padding(horizontal = 9.dp, vertical = 4.dp),
+        ) {
+            Text(
+                text = "Nouveau poids : ${trimWeight(payload.proposedWeight)} kg · À confirmer",
+                color = Color(0xFFF0E8FF),
+                fontSize = 9.sp,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }
@@ -276,7 +304,7 @@ private fun RestScreen(state: WatchScreenState.Ready, viewModel: WatchViewModel)
                 lineHeight = 60.sp,
             )
             Text(
-                text = if (state.pausedRestRemaining != null) "Chrono en pause" else state.payload.exerciseName,
+                text = if (state.pausedRestRemaining != null) "Chrono en pause" else "Exercice : ${state.payload.exerciseName}",
                 color = Color(0xFFB7C9EA),
                 fontSize = 10.sp,
                 maxLines = 1,
@@ -297,7 +325,11 @@ private fun RestScreen(state: WatchScreenState.Ready, viewModel: WatchViewModel)
                 RoundActionButton("+15", enabled, viewModel::addRest)
             }
             Spacer(Modifier.height(5.dp))
-            FinishButton(state, viewModel)
+            ActionChip(
+                text = if (state.busyAction == "skip-rest") "Passage..." else "Passer le repos",
+                onClick = viewModel::skipRest,
+                enabled = enabled,
+            )
         }
     }
 }
@@ -306,51 +338,93 @@ private fun RestScreen(state: WatchScreenState.Ready, viewModel: WatchViewModel)
 private fun CompletedScreen(state: WatchScreenState.Ready, onRefresh: () -> Unit) {
     val activity = LocalContext.current as? Activity
     val summary = state.payload.summary
-    Column(
+    ScalingLazyColumn(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
     ) {
-        Text("Séance terminée", fontSize = 14.sp, color = Color(0xFF56F0C2), fontWeight = FontWeight.Black)
-        Text("+${summary?.xpGained ?: 100} XP", fontSize = 28.sp, fontWeight = FontWeight.Black)
-        Text(state.syncLabel, color = Color(0xFF56F0C2), fontSize = 12.sp)
-        Spacer(Modifier.height(8.dp))
-
-        if (summary != null) {
-            Column(
-                modifier = Modifier.fillMaxWidth(0.86f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+        item {
+            Text("Séance terminée", fontSize = 15.sp, color = Color(0xFF56F0C2), fontWeight = FontWeight.Black)
+        }
+        item {
+            Text(
+                state.payload.workoutTitle.cleanExerciseTitle(),
+                modifier = Modifier.fillMaxWidth(0.82f),
+                textAlign = TextAlign.Center,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Black,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        item {
+            Box(
+                modifier = Modifier
+                    .padding(top = 5.dp)
+                    .background(Color(0xFF173F35), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
             ) {
-                SummaryRow("Durée", formatDuration(summary.durationSeconds))
-                SummaryRow("Volume", "${summary.volumeKg} kg")
-                SummaryRow("Séries", "${summary.sets}")
-                if (summary.levelReached) {
-                    SummaryRow("Niveau", "${summary.level}")
+                Text("+${summary?.xpGained ?: 100} XP", color = Color(0xFF8DFFD2), fontSize = 11.sp, fontWeight = FontWeight.Black)
+            }
+        }
+        item {
+            Text(finalSyncLabel(state), color = finalSyncColor(state), fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
+        }
+        if (summary != null) {
+            item {
+                SummaryGrid(summary)
+            }
+            item {
+                Text("${summary.sets} séries réalisées", color = Color(0xFFB7C9EA), fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+            }
+            if (summary.levelReached) {
+                item {
+                    Text("Niveau ${summary.level} atteint", color = Color(0xFFC9B5FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
         } else {
-            Text(
-                text = "Synthèse en cours...",
-                color = Color(0xFFB7C9EA),
-                fontSize = 12.sp,
-                textAlign = TextAlign.Center,
-            )
+            item {
+                Text("Synthèse en cours...", color = Color(0xFFB7C9EA), fontSize = 12.sp, textAlign = TextAlign.Center)
+            }
         }
-
-        Spacer(Modifier.height(8.dp))
-        ActionChip("Retour téléphone", onClick = { activity?.finish() ?: onRefresh() }, enabled = state.busyAction == null)
+        item {
+            Spacer(Modifier.height(6.dp))
+            ActionChip("Terminer", onClick = { activity?.finish() ?: onRefresh() }, enabled = state.busyAction == null)
+        }
     }
 }
 
 @Composable
-private fun SummaryRow(label: String, value: String) {
+private fun SummaryGrid(summary: WatchSessionSummary) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth(0.92f)
+            .padding(top = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.SpaceBetween) {
+            SummaryTile("Durée", formatDuration(summary.durationSeconds), Modifier.fillMaxWidth(0.48f))
+            SummaryTile("Volume", "${summary.volumeKg} kg", Modifier.fillMaxWidth(0.48f))
+        }
+        Row(horizontalArrangement = Arrangement.SpaceBetween) {
+            SummaryTile("Exercices", "${summary.exercises}", Modifier.fillMaxWidth(0.48f))
+            SummaryTile("FC moy.", summary.averageHeartRateBpm?.let { "$it bpm" } ?: "—", Modifier.fillMaxWidth(0.48f))
+        }
+    }
+}
+
+@Composable
+private fun SummaryTile(label: String, value: String, modifier: Modifier) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = modifier
+            .background(Color(0xFF0B1832), RoundedCornerShape(12.dp))
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, color = Color(0xFFB7C9EA), fontSize = 10.sp, maxLines = 1)
-        Text(value, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black, maxLines = 1)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label, color = Color(0xFFB7C9EA), fontSize = 8.sp, maxLines = 1)
+            Text(value, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black, maxLines = 1)
+        }
     }
 }
 
@@ -378,16 +452,28 @@ private fun Header(title: String, syncLabel: String, error: String?) {
 }
 
 @Composable
-private fun FinishButton(state: WatchScreenState.Ready, viewModel: WatchViewModel) {
+private fun FinishSessionChip(state: WatchScreenState.Ready, viewModel: WatchViewModel) {
     val enabled = state.busyAction == null
-    SmallButton(
-        text = if (state.finishConfirm) "OK Fin" else "Fin",
+    ActionChip(
+        text = if (state.finishConfirm) "Confirmer la fin" else "Terminer la séance",
         enabled = enabled,
-        danger = state.finishConfirm,
         onClick = {
             if (state.finishConfirm) viewModel.completeSession() else viewModel.requestFinish()
         },
     )
+}
+
+private fun finalSyncLabel(state: WatchScreenState.Ready): String = when {
+    state.error != null || state.syncLabel in setOf("Erreur", "Échec") -> "Échec de synchronisation"
+    state.syncLabel.contains("téléphone", ignoreCase = true) -> "En attente du téléphone"
+    state.syncLabel.contains("réseau", ignoreCase = true) -> "En attente du réseau"
+    else -> "Synchronisé"
+}
+
+private fun finalSyncColor(state: WatchScreenState.Ready): Color = when (finalSyncLabel(state)) {
+    "Synchronisé" -> Color(0xFF56F0C2)
+    "Échec de synchronisation" -> Color(0xFFFFB86B)
+    else -> Color(0xFF9CCBFF)
 }
 
 @Composable

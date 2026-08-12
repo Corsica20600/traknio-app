@@ -4,6 +4,7 @@ import android.os.SystemClock
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
+import java.time.Instant
 
 fun createRestDeadline(restRemaining: Int, elapsedNowMs: Long = SystemClock.elapsedRealtime()): RestDeadline? {
     val seconds = max(0, restRemaining)
@@ -30,6 +31,14 @@ fun shouldReplaceDeadline(
     val currentRemaining = remainingFromDeadline(current, elapsedNowMs)
     val nextRemaining = remainingFromDeadline(next, elapsedNowMs)
     return abs(currentRemaining - nextRemaining) > 2
+}
+
+fun isRestSnapshotAtLeastAsRecent(currentUpdatedAt: String?, nextUpdatedAt: String?): Boolean {
+    if (currentUpdatedAt.isNullOrBlank()) return true
+    if (nextUpdatedAt.isNullOrBlank()) return false
+    val current = runCatching { Instant.parse(currentUpdatedAt) }.getOrNull() ?: return true
+    val next = runCatching { Instant.parse(nextUpdatedAt) }.getOrNull() ?: return true
+    return !next.isBefore(current)
 }
 
 fun formatRest(seconds: Int): String {

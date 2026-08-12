@@ -191,6 +191,7 @@ class TraknioWatchApi(
     private fun parsePayload(json: JSONObject): WatchPayload {
         return WatchPayload(
             sessionId = json.getString("sessionId"),
+            workoutTitle = json.optString("workoutTitle", "Séance"),
             exerciseName = json.getString("exerciseName"),
             exerciseIndex = json.optInt("exerciseIndex", 1),
             totalExercises = json.optInt("totalExercises", 1),
@@ -198,6 +199,10 @@ class TraknioWatchApi(
             totalSets = json.optInt("totalSets", 1),
             targetReps = json.optInt("targetReps", 10),
             weight = if (json.isNull("weight")) null else json.optDouble("weight"),
+            activeWeight = if (json.isNull("activeWeight")) null else json.optDouble("activeWeight"),
+            proposedWeight = if (json.isNull("proposedWeight")) null else json.optDouble("proposedWeight"),
+            weightConfirmationRequired = json.optBoolean("weightConfirmationRequired", false),
+            isBodyweight = json.optBoolean("isBodyweight", false),
             restRemaining = json.optInt("restRemaining", 0),
             restStatus = json.optString("restStatus", "IDLE"),
             restUpdatedAt = json.optString("restUpdatedAt").takeIf { it.isNotBlank() },
@@ -211,8 +216,9 @@ class TraknioWatchApi(
         return WatchSessionSummary(
             durationSeconds = if (json.isNull("durationSeconds")) null else json.optInt("durationSeconds"),
             volumeKg = json.optInt("volumeKg", 0),
+            exercises = json.optInt("exercises", 0),
             sets = json.optInt("sets", 0),
-            calories = if (json.isNull("calories")) null else json.optInt("calories"),
+            averageHeartRateBpm = if (json.isNull("averageHeartRateBpm")) null else json.optInt("averageHeartRateBpm"),
             xpGained = json.optInt("xpGained", 100),
             level = json.optInt("level", 1),
             levelReached = json.optBoolean("levelReached", false),
