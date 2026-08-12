@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -298,48 +299,123 @@ private fun ActiveWeight(payload: WatchPayload) {
 private fun RestScreen(state: WatchScreenState.Ready, viewModel: WatchViewModel) {
     val enabled = state.busyAction == null
 
+    RestScreenContent(
+        remainingSeconds = state.displayRestRemaining,
+        isPaused = state.pausedRestRemaining != null,
+        exerciseName = state.payload.exerciseName,
+        syncLabel = state.syncLabel,
+        error = state.error,
+        isSkipping = state.busyAction == "skip-rest",
+        enabled = enabled,
+        onRemoveRest = viewModel::removeRest,
+        onTogglePause = viewModel::toggleRestPause,
+        onAddRest = viewModel::addRest,
+        onSkipRest = viewModel::skipRest,
+    )
+}
+
+@Composable
+private fun RestScreenContent(
+    remainingSeconds: Int,
+    isPaused: Boolean,
+    exerciseName: String,
+    syncLabel: String,
+    error: String?,
+    isSkipping: Boolean,
+    enabled: Boolean,
+    onRemoveRest: () -> Unit,
+    onTogglePause: () -> Unit,
+    onAddRest: () -> Unit,
+    onSkipRest: () -> Unit,
+) {
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Header("Repos", state.syncLabel, state.error)
-        Spacer(Modifier.height(4.dp))
+        Header("Repos", syncLabel, error)
+        Spacer(Modifier.height(2.dp))
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Respire", color = Color(0xFFB7C9EA), fontSize = 12.sp)
+            Text("Respire", color = Color(0xFFB7C9EA), fontSize = 11.sp)
             Text(
-                text = formatRest(state.displayRestRemaining),
-                fontSize = if (state.displayRestRemaining >= 60) 44.sp else 60.sp,
+                text = formatRest(remainingSeconds),
+                fontSize = if (remainingSeconds >= 60) 40.sp else 48.sp,
                 fontWeight = FontWeight.Black,
-                lineHeight = 60.sp,
+                lineHeight = 48.sp,
             )
             Text(
-                text = if (state.pausedRestRemaining != null) "Chrono en pause" else "Exercice : ${state.payload.exerciseName}",
+                text = if (isPaused) "Chrono en pause" else "Exercice : $exerciseName",
                 color = Color(0xFFB7C9EA),
-                fontSize = 10.sp,
+                fontSize = 9.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
             )
         }
 
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(3.dp))
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                RoundActionButton("-15", enabled, viewModel::removeRest)
+                RoundActionButton("-15", enabled, onRemoveRest)
                 RoundActionButton(
-                    text = if (state.pausedRestRemaining != null) "▶" else "Ⅱ",
+                    text = if (isPaused) "▶" else "Ⅱ",
                     enabled = enabled,
-                    onClick = viewModel::toggleRestPause,
+                    onClick = onTogglePause,
                 )
-                RoundActionButton("+15", enabled, viewModel::addRest)
+                RoundActionButton("+15", enabled, onAddRest)
             }
-            Spacer(Modifier.height(5.dp))
-            ActionChip(
-                text = if (state.busyAction == "skip-rest") "Passage..." else "Passer le repos",
-                onClick = viewModel::skipRest,
+            Spacer(Modifier.height(3.dp))
+            CompactRestSkipChip(
+                text = if (isSkipping) "Passage..." else "Passer le repos",
+                onClick = onSkipRest,
                 enabled = enabled,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompactRestSkipChip(text: String, onClick: () -> Unit, enabled: Boolean) {
+    Chip(
+        modifier = Modifier
+            .width(142.dp)
+            .height(48.dp),
+        label = {
+            Text(
+                text = text,
+                modifier = Modifier.fillMaxWidth(),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            )
+        },
+        enabled = enabled,
+        colors = ChipDefaults.primaryChipColors(
+            backgroundColor = Color(0xFF2E8BFF),
+            contentColor = Color.White,
+        ),
+        onClick = onClick,
+    )
+}
+
+@Preview(device = "id:wearos_large_round", widthDp = 227, heightDp = 227, showBackground = true)
+@Composable
+private fun RestScreenInitialPreview() {
+    MaterialTheme {
+        WatchChrome {
+            RestScreenContent(
+                remainingSeconds = 90,
+                isPaused = false,
+                exerciseName = "Développé couché",
+                syncLabel = "Synchronisé",
+                error = null,
+                isSkipping = false,
+                enabled = true,
+                onRemoveRest = {},
+                onTogglePause = {},
+                onAddRest = {},
+                onSkipRest = {},
             )
         }
     }

@@ -73,7 +73,7 @@ android {
         applicationId = "com.traknio.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 17
+        versionCode = 18
         versionName = "0.5.4"
 
         val syncBaseUrl = propertyValue("TRAKNIO_SYNC_BASE_URL")
@@ -117,6 +117,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
     implementation("androidx.wear.compose:compose-foundation:1.4.1")
     implementation("androidx.wear.compose:compose-material:1.4.1")
+    compileOnly("androidx.compose.ui:ui-tooling-preview:1.6.8")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
     implementation("com.google.android.gms:play-services-wearable:19.0.0")
