@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -390,7 +391,23 @@ private fun ActiveSetContent(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("‹ Séries", modifier = Modifier.clickable(onClick = onBack), color = Color(0xFF9CCBFF), fontSize = 8.sp)
+            // Keep the header compact for two-line names, but place a transparent 48 dp
+            // hit region behind it so the wearer never has to target only the glyphs.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.96f)
+                    .height(12.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.70f)
+                        .height(48.dp)
+                        .offset(y = 12.dp)
+                        .clickable(onClick = onBack),
+                )
+                Text("‹  Séries", color = Color(0xFF9CCBFF), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+            }
             WearExerciseTitle(exerciseName)
             Text(
                 text = "SÉRIE $setIndex/$totalSets",
@@ -477,7 +494,7 @@ private fun EditorStepButton(text: String, onClick: () -> Unit) {
         modifier = Modifier.size(width = 76.dp, height = 48.dp),
         colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF152C56), contentColor = Color.White),
         onClick = onClick,
-    ) { Text(text, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+    ) { Text(text, style = WearTypography.action.copy(fontSize = 13.sp)) }
 }
 
 @Composable
@@ -1030,7 +1047,7 @@ private fun BigActionButton(text: String, enabled: Boolean, onClick: () -> Unit,
             onClick()
         },
     ) {
-        Text(text, fontSize = 13.sp, fontWeight = FontWeight.Black, letterSpacing = 0.6.sp)
+        Text(text, style = WearTypography.action.copy(fontSize = 13.sp, letterSpacing = 0.6.sp))
     }
 }
 
@@ -1045,7 +1062,7 @@ private fun WearValueButton(text: String, enabled: Boolean, onClick: () -> Unit,
             disabledBackgroundColor = Color(0xFF1B2437),
         ),
         onClick = onClick,
-    ) { Text(text, fontSize = 16.sp, fontWeight = FontWeight.Black) }
+    ) { Text(text, style = WearTypography.display.copy(fontSize = 16.sp, lineHeight = 20.sp)) }
 }
 
 @Composable
