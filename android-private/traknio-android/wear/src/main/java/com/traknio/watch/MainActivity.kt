@@ -227,7 +227,7 @@ private fun ReadyToCompleteScreen(state: WatchScreenState.Ready, viewModel: Watc
 private fun ActiveSetScreen(state: WatchScreenState.Ready, viewModel: WatchViewModel) {
     val payload = state.payload
     val enabled = state.busyAction == null
-    val initialWeight = (payload.activeWeight ?: payload.weight ?: 0.0).coerceAtLeast(0.0)
+    val initialWeight = (payload.weight ?: payload.activeWeight ?: 0.0).coerceAtLeast(0.0)
     var reps by remember(payload.sessionId, payload.exerciseIndex, payload.setIndex) { mutableStateOf(payload.targetReps) }
     var weight by remember(payload.sessionId, payload.exerciseIndex, payload.setIndex) { mutableStateOf(initialWeight) }
     var editor by remember { mutableStateOf<SetEditor?>(null) }
@@ -241,7 +241,10 @@ private fun ActiveSetScreen(state: WatchScreenState.Ready, viewModel: WatchViewM
             increment = 1.0,
             minimum = 1.0,
             onValueChange = { reps = it.toInt() },
-            onDone = { editor = null },
+            onDone = {
+                viewModel.updateLiveTarget(reps, weight)
+                editor = null
+            },
         )
         SetEditor.Weight -> ValueEditorScreen(
             label = "CHARGE",
@@ -251,7 +254,10 @@ private fun ActiveSetScreen(state: WatchScreenState.Ready, viewModel: WatchViewM
             increment = 2.5,
             minimum = 0.0,
             onValueChange = { weight = it },
-            onDone = { editor = null },
+            onDone = {
+                viewModel.updateLiveTarget(reps, weight)
+                editor = null
+            },
         )
         null -> ActiveSetContent(
             exerciseName = payload.exerciseName,
@@ -284,7 +290,7 @@ private fun ActiveSetContent(
     onValidate: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -292,7 +298,7 @@ private fun ActiveSetContent(
         Text(
             text = "SÉRIE $setIndex/$totalSets",
             color = Color(0xFF9CCBFF),
-            fontSize = 11.sp,
+            fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(top = 3.dp),
         )
@@ -301,21 +307,21 @@ private fun ActiveSetContent(
             modifier = Modifier
                 .padding(top = 1.dp)
                 .clickable(enabled = enabled, onClick = onEditReps),
-            fontSize = 54.sp,
+            fontSize = 46.sp,
             fontWeight = FontWeight.Black,
-            lineHeight = 54.sp,
+            lineHeight = 46.sp,
         )
-        Text("RÉPÉTITIONS", color = Color(0xFFB7C9EA), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        Text("RÉPÉTITIONS", color = Color(0xFFB7C9EA), fontSize = 8.sp, fontWeight = FontWeight.Bold)
         WearValueButton(
             text = if (isBodyweight && weight <= 0) "Poids du corps" else "${trimWeight(weight)} kg",
             enabled = enabled,
             onClick = onEditWeight,
-            modifier = Modifier.padding(top = 5.dp),
+            modifier = Modifier.padding(top = 2.dp),
         )
         if (error != null) {
             Text(error, color = Color(0xFFFFB86B), fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        BigActionButton("VALIDER", enabled = enabled, onClick = onValidate, modifier = Modifier.padding(top = 7.dp))
+        BigActionButton("VALIDER", enabled = enabled, onClick = onValidate, modifier = Modifier.padding(top = 4.dp))
     }
 }
 

@@ -40,6 +40,15 @@ class TraknioWatchApi(
         ),
     )
 
+    suspend fun updateLiveTarget(payload: WatchPayload, targetReps: Int, weight: Double?): WatchPayload = postAction(
+        operation = "update-live-target",
+        path = "/api/watch/update-live-target",
+        sessionId = payload.sessionId,
+        // The existing relay schema carries the current set repetition value as actualReps.
+        // This action does not validate a set; the server stores it as the live target.
+        extra = mapOf("actualReps" to targetReps, "weight" to weight),
+    )
+
     suspend fun skipRest(sessionId: String): WatchPayload = postAction("skip-rest", "/api/watch/skip-rest", sessionId)
 
     suspend fun pauseRest(sessionId: String): WatchPayload = postAction("pause-rest", "/api/watch/pause-rest", sessionId)

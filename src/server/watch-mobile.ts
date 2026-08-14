@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/src/lib/prisma";
 import { getExerciseDisplayName } from "@/src/lib/exercise-overrides";
 import { getOrCreateDemoProfile } from "@/src/server/fitness-queries";
-import { getSessionExerciseReplacements, getSessionLiveTargets, resolveReplacementExercises } from "@/src/server/session-exercise-replacements";
+import { getSessionExerciseReplacements, getSessionLiveTargets, parseSessionNotesMeta, resolveReplacementExercises, serializeSessionNotesMeta } from "@/src/server/session-exercise-replacements";
 import { clampRestSeconds, getSharedRestRemaining } from "@/src/server/shared-rest-timer";
 
 const DEFAULT_REPS = [12, 10, 10];
@@ -475,6 +475,54 @@ export async function validateWatchSet(input: {
     },
   });
 
+  return getWatchPayload(session.id, input.userProfileId, db);
+}
+
+export async function updateWatchLiveTarget(input: {
+  sessionId: string;
+  targetReps?: number | null;
+  weight?: number | null;
+  userProfileId?: string;
+}, db: WatchDatabase = prisma) {
+  const session = await resolveSession(input.sessionId, input.userProfileId, db);
+  if (!session) return null;
+  const ordered = await getOrderedExercisesForSession(session, db);
+  const exerciseIndex = Math.max(0, Math.min(ordered.length - 1, session.watchSession?.currentExerciseIndex ?? 0));
+  const currentExercise = ordered[exerciseIndex];
+  if (!currentExercise) return null;
+  const setIndex = Math.max(1, session.watchSession?.currentSetIndex ?? 1);
+  const key = currentExercise.programExerciseId ?? `exercise:${currentExercise.exerciseId}`;
+  const existing = getSessionLiveTargets(session.notes)[key];
+  const targetReps = input.targetReps == null
+    ? existing?.targetReps ?? currentExercise.targetReps
+    : Math.max(1, Math.floor(input.targetReps));
+  const targetWeightKg = input.weight == null
+    ? existing?.targetWeightKg ?? currentExercise.plannedWeightKg ?? null
+    : Math.max(0, input.weight);
+  const meta = parseSessionNotesMeta(session.notes);
+  await db.workoutSession.update({
+    where: { id: session.id },
+    data: {
+      notes: serializeSessionNotesMeta({
+        ...meta,
+        liveTargets: {
+          ...(meta.liveTargets ?? {}),
+          [key]: {
+            exerciseId: currentExercise.exerciseId,
+            setIndex,
+            targetReps,
+            targetWeightKg,
+            updatedAt: new Date().toISOString(),
+          },
+        },
+      }),
+    },
+  });
+  await db.watchSession.upsert({
+    where: { workoutSessionId: session.id },
+    update: { currentExerciseIndex: exerciseIndex, currentSetIndex: setIndex, status: "ACTIVE", lastSyncAt: new Date() },
+    create: { workoutSessionId: session.id, currentExerciseIndex: exerciseIndex, currentSetIndex: setIndex, status: "ACTIVE", lastSyncAt: new Date() },
+  });
   return getWatchPayload(session.id, input.userProfileId, db);
 }
 

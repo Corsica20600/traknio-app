@@ -55,6 +55,13 @@ class WatchViewModel(context: Context) : ViewModel() {
         api.validateSet(payload, actualReps.coerceAtLeast(1), weight?.coerceAtLeast(0.0))
     }
 
+    fun updateLiveTarget(targetReps: Int, weight: Double?) = perform(
+        "update-live-target",
+        optimistic = { updateOptimisticLiveTarget(targetReps, weight) },
+    ) { payload ->
+        api.updateLiveTarget(payload, targetReps.coerceAtLeast(1), weight?.coerceAtLeast(0.0))
+    }
+
     fun skipRest() = perform(
         "skip-rest",
         optimistic = {
@@ -173,6 +180,7 @@ class WatchViewModel(context: Context) : ViewModel() {
                     val queued = _state.value as? WatchScreenState.Ready
                     if (queued != null) {
                         _state.value = queued.copy(
+                            busyAction = null,
                             syncLabel = "Attente téléphone",
                             error = null,
                         )
@@ -363,6 +371,19 @@ class WatchViewModel(context: Context) : ViewModel() {
             displayRestRemaining = remainingSeconds,
             pausedRestRemaining = if (paused && remainingSeconds > 0) remainingSeconds else null,
         )
+    }
+
+    private fun updateOptimisticLiveTarget(targetReps: Int, weight: Double?) {
+        val ready = _state.value as? WatchScreenState.Ready ?: return
+        val updatedPayload = ready.payload.copy(
+            targetReps = targetReps.coerceAtLeast(1),
+            weight = weight?.coerceAtLeast(0.0),
+            activeWeight = weight?.coerceAtLeast(0.0),
+            proposedWeight = null,
+            weightConfirmationRequired = false,
+        )
+        latestPayload = updatedPayload
+        _state.value = ready.copy(payload = updatedPayload)
     }
 
     private companion object {

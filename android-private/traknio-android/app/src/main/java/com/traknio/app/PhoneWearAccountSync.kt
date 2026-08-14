@@ -5,6 +5,7 @@ import android.util.Log
 import android.webkit.CookieManager
 import com.google.android.gms.wearable.Wearable
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
@@ -20,14 +21,22 @@ object PhoneWearAccountSync {
     fun broadcastConnectedAccount(context: Context) {
         val appContext = context.applicationContext
         scope.launch {
-            val accountState = readAccountState() ?: return@launch
-            val nodes = Wearable.getNodeClient(appContext).connectedNodes.await()
-            Log.i(TAG, "account broadcast nodes count=${nodes.size}")
-            for (node in nodes) {
-                Wearable.getMessageClient(appContext)
-                    .sendMessage(node.id, WearPairingPaths.ACCOUNT_STATE, accountState.toString().toByteArray())
-                    .await()
-                Log.i(TAG, "account state sent to watch path=${WearPairingPaths.ACCOUNT_STATE}")
+            try {
+                val accountState = readAccountState() ?: return@launch
+                val nodes = Wearable.getNodeClient(appContext).connectedNodes.await()
+                Log.i(TAG, "account broadcast nodes count=${nodes.size}")
+                for (node in nodes) {
+                    Wearable.getMessageClient(appContext)
+                        .sendMessage(node.id, WearPairingPaths.ACCOUNT_STATE, accountState.toString().toByteArray())
+                        .await()
+                    Log.i(TAG, "account state sent to watch path=${WearPairingPaths.ACCOUNT_STATE}")
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                // A phone without Wear OS must never lose its UI session because the optional
+                // watch bridge is unavailable (for example a phone-only emulator).
+                Log.w(TAG, "account broadcast skipped; Wearable API unavailable", error)
             }
         }
     }

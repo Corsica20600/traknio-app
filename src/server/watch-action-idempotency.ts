@@ -4,6 +4,7 @@ import { prisma } from "@/src/lib/prisma";
 
 export type WatchActionOperation =
   | "validate-set"
+  | "update-live-target"
   | "skip-rest"
   | "adjust-rest"
   | "pause-rest"

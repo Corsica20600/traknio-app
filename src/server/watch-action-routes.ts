@@ -9,13 +9,14 @@ import {
   resumeWatchRest,
   skipWatchRest,
   validateWatchSet,
+  updateWatchLiveTarget,
 } from "@/src/server/watch-mobile";
 import { runIdempotentWatchAction, type WatchActionOperation, type WatchActionResult } from "@/src/server/watch-action-idempotency";
 
 type WatchAccess = { userProfileId?: string };
 
 function revalidateWatchPaths(operation: WatchActionOperation) {
-  if (["validate-set", "skip-rest", "adjust-rest", "pause-rest", "resume-rest", "complete-session"].includes(operation)) {
+  if (["validate-set", "update-live-target", "skip-rest", "adjust-rest", "pause-rest", "resume-rest", "complete-session"].includes(operation)) {
     revalidatePath("/workout");
     revalidatePath("/dashboard");
     revalidatePath("/history");
@@ -54,6 +55,13 @@ export async function executeWatchActionRoute(input: {
             return validateWatchSet({
               sessionId,
               actualReps: canonicalPayload.actualReps,
+              weight: canonicalPayload.weight,
+              userProfileId,
+            }, tx);
+          case "update-live-target":
+            return updateWatchLiveTarget({
+              sessionId,
+              targetReps: canonicalPayload.actualReps,
               weight: canonicalPayload.weight,
               userProfileId,
             }, tx);

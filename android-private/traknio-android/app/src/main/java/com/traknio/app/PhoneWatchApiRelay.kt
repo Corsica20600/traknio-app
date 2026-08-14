@@ -164,6 +164,7 @@ class PhoneWatchRelayClient(private val context: Context) {
         val endpoint = when (request.operation) {
             "current-session" -> "/api/watch/current-session" + request.sessionId?.let { "?sessionId=${java.net.URLEncoder.encode(it, Charsets.UTF_8.name())}" }.orEmpty()
             "validate-set" -> "/api/watch/validate-set"
+            "update-live-target" -> "/api/watch/update-live-target"
             "skip-rest" -> "/api/watch/skip-rest"
             "adjust-rest" -> "/api/watch/adjust-rest"
             "pause-rest" -> "/api/watch/pause-rest"
