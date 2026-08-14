@@ -169,6 +169,8 @@ model UserProfile {
   trainingLevel                 ProgramLevel?
   primaryGoal                   ProgramGoal?
   sessionsPerWeek               Int?
+  onboardingVersion             Int                     @default(1)
+  onboardingState               Json?
   stripeCustomerId              String?                 @unique
   stripeSubscriptionId          String?                 @unique
   googlePlayPurchaseTokenHash   String?                 @unique

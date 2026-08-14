@@ -6,6 +6,7 @@ import { AppChrome } from "@/src/components/ui/app-chrome";
 import { BRAND } from "@/src/lib/brand";
 import { absoluteUrl, getSiteUrl } from "@/src/lib/site-url";
 import { isTraknioAssistantEnabled } from "@/src/server/assistant/assistant-access";
+import { getOnboardingSnapshot } from "@/src/server/onboarding-actions";
 import "./globals.css";
 
 const exo2 = Exo_2({ variable: "--font-exo-2", subsets: ["latin"], display: "swap" });
@@ -84,11 +85,12 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const session = await auth().catch(() => null);
   const isConnected = Boolean(session?.user?.email);
+  const onboarding = isConnected ? await getOnboardingSnapshot().catch(() => null) : null;
 
   return (
     <html lang="fr" className={`${exo2.variable} ${orbitron.variable} ${raleway.variable}`}>
       <body>
-        <AppChrome isConnected={isConnected} assistantEnabled={isTraknioAssistantEnabled()}>{children}</AppChrome>
+        <AppChrome isConnected={isConnected} assistantEnabled={isTraknioAssistantEnabled()} onboarding={onboarding}>{children}</AppChrome>
         <Script id="pwa-sw-register" strategy="afterInteractive">
           {`
             if ('serviceWorker' in navigator) {

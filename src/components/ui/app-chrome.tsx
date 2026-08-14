@@ -6,16 +6,20 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { TraknioAssistant } from "@/src/components/assistant/traknio-assistant";
 import { BottomNav } from "@/src/components/ui/bottom-nav";
+import { InitialOnboarding } from "@/src/components/onboarding/initial-onboarding";
 import { BRAND } from "@/src/lib/brand";
+import type { OnboardingSnapshot } from "@/src/lib/onboarding";
 
 export function AppChrome({
   children,
   isConnected,
   assistantEnabled,
+  onboarding,
 }: {
   children: ReactNode;
   isConnected: boolean;
   assistantEnabled: boolean;
+  onboarding: OnboardingSnapshot | null;
 }) {
   const pathname = usePathname();
   const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
@@ -53,6 +57,7 @@ export function AppChrome({
       <main className="screen">{children}</main>
       {isConnected && assistantEnabled ? <TraknioAssistant /> : null}
       {isConnected ? <BottomNav /> : null}
+      {isConnected ? <InitialOnboarding onboarding={onboarding} /> : null}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import {
   closestCenter,
   DndContext,
@@ -22,8 +22,7 @@ import { useRouter } from "next/navigation";
 import { ExerciseVisual } from "@/src/components/exercise/exercise-visual";
 import { BrandSelect } from "@/src/components/ui/brand-select";
 import { PrimaryButton } from "@/src/components/ui/primary-button";
-
-const REORDER_TIP_STORAGE_KEY = "traknio.program-exercise-reorder-tip.seen";
+import { ContextualWalkthrough } from "@/src/components/onboarding/contextual-walkthrough";
 
 type ExerciseOption = {
   id: string;
@@ -151,6 +150,7 @@ function SortableExerciseCard({
           <button
             type="button"
             className="reorder-btn drag-handle"
+            data-onboarding-target="program-reorder"
             aria-label={`Déplacer ${ex.exercise.nameFr || ex.exercise.name}`}
             title="Glisser pour réordonner"
             {...attributes}
@@ -226,10 +226,12 @@ export function ProgramDayExercisesEditor({
   programId,
   initialExercises,
   exerciseOptions,
+  showReorderWalkthrough = false,
 }: {
   programId: string;
   initialExercises: DayExercise[];
   exerciseOptions: ExerciseOption[];
+  showReorderWalkthrough?: boolean;
 }) {
   const router = useRouter();
   const [exercises, setExercises] = useState(initialExercises);
@@ -237,27 +239,12 @@ export function ProgramDayExercisesEditor({
     type: "success" | "error";
     message: string;
   } | null>(null);
-  const [showReorderTip, setShowReorderTip] = useState(false);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 8 } }),
   );
 
   const ids = useMemo(() => exercises.map((item) => item.id), [exercises]);
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      if (window.localStorage.getItem(REORDER_TIP_STORAGE_KEY) !== "true") {
-        setShowReorderTip(true);
-      }
-    }, 0);
-    return () => window.clearTimeout(timeoutId);
-  }, []);
-
-  function dismissReorderTip() {
-    window.localStorage.setItem(REORDER_TIP_STORAGE_KEY, "true");
-    setShowReorderTip(false);
-  }
 
   async function persistMove(exerciseId: string, direction: "up" | "down") {
     const res = await fetch(`/api/programs/${encodeURIComponent(programId)}/exercises/reorder`, {
@@ -288,6 +275,9 @@ export function ProgramDayExercisesEditor({
     try {
       for (let i = 0; i < hops; i += 1) {
         await persistMove(movedId, direction);
+      }
+      if (showReorderWalkthrough) {
+        window.dispatchEvent(new CustomEvent("traknio:onboarding-dismiss", { detail: { step: "reorderSeen" } }));
       }
     } catch {
       setExercises(previous);
@@ -410,21 +400,13 @@ export function ProgramDayExercisesEditor({
 
   return (
     <>
-      {showReorderTip ? (
-        <div className="program-reorder-tip-backdrop">
-          <section
-            className="program-reorder-tip"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="program-reorder-tip-title"
-          >
-            <p className="eyebrow">Astuce</p>
-            <h3 id="program-reorder-tip-title">Réorganise ta séance</h3>
-            <p>Maintiens les 6 points pour déplacer un exercice dans ta séance.</p>
-            <PrimaryButton type="button" onClick={dismissReorderTip}>J&apos;ai compris</PrimaryButton>
-          </section>
-        </div>
-      ) : null}
+      <ContextualWalkthrough
+        active={showReorderWalkthrough && exercises.length >= 2}
+        step="reorderSeen"
+        target="[data-onboarding-target='program-reorder']"
+        title="Réorganise ta séance"
+        message="Maintiens cette poignée et fais glisser l’exercice pour changer l’ordre."
+      />
 
       <DndContext
         sensors={sensors}

@@ -12,6 +12,7 @@ import { createBillingCheckoutAction, openBillingPortalAction } from "@/src/serv
 import { getAccountSettingsData } from "@/src/server/fitness-queries";
 import { disconnectIntegrationAction, enableHealthConnectPreparationAction } from "@/src/server/integration-actions";
 import { revokeWatchDeviceAction } from "@/src/server/watch-pairing-actions";
+import { ReplayTutorialButton } from "@/src/components/onboarding/replay-tutorial-button";
 import { isSpotifyConfigured } from "@/src/server/spotify";
 
 export const metadata = privatePageMetadata(
@@ -205,6 +206,7 @@ export default async function SettingsPage(props: SettingsPageProps) {
             <button type="submit" className="primary-button full-line">Connexion Google</button>
           </form>
         )}
+        {connected ? <ReplayTutorialButton /> : null}
       </GlassCard>
 
       <GlassCard className="settings-billing-card" elevated>

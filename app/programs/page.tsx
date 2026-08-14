@@ -9,14 +9,17 @@ import { ProgramCard } from "@/src/components/programs/program-card";
 import { ProgramExercisePicker } from "@/src/components/programs/program-exercise-picker";
 import { ProgramDayExercisesEditor } from "@/src/components/programs/program-day-exercises-editor";
 import { ProgramSummary } from "@/src/components/programs/program-summary";
+import { ProgramsOnboarding } from "@/src/components/programs/programs-onboarding";
 import { BrandSelect } from "@/src/components/ui/brand-select";
 import {
   addExerciseToProgramDayAction,
+  addProgramDayAction,
   createSimpleProgramAction,
   deleteProgramAction,
   renameProgramDayAction,
 } from "@/src/server/fitness-actions";
 import { getExerciseOptionsForPrograms, getProgramsForDemoUser } from "@/src/server/fitness-queries";
+import { getOnboardingSnapshot } from "@/src/server/onboarding-actions";
 import { levelToFr } from "@/src/lib/exercise-i18n";
 import { privatePageMetadata } from "@/src/lib/private-page-metadata";
 
@@ -66,13 +69,15 @@ function programExercisesCount(program: Awaited<ReturnType<typeof getProgramsFor
 
 export default async function ProgramsPage() {
   await connection();
-  const [programs, exerciseOptions] = await Promise.all([
+  const [programs, exerciseOptions, onboarding] = await Promise.all([
     getProgramsForDemoUser(),
     getExerciseOptionsForPrograms(2000),
+    getOnboardingSnapshot().catch(() => null),
   ]);
   const activeProgram = programs.find((program) => program.status === "ACTIVE") ?? null;
   const totalDays = programs.reduce((acc, program) => acc + program.days.length, 0);
   const totalProgramExercises = programs.reduce((acc, program) => acc + programExercisesCount(program), 0);
+  const reorderDayId = programs.flatMap((program) => program.days).find((day) => day.exercises.length >= 2)?.id;
 
   return (
     <div className="stack">
@@ -88,7 +93,7 @@ export default async function ProgramsPage() {
         nextSessionTitle={activeProgram?.days[0]?.title ?? null}
       />
 
-      <GlassCard>
+      <GlassCard data-onboarding-target="program-create">
         <p className="eyebrow">Nouveau programme</p>
         <form action={createSimpleProgramAction} className="form-grid">
           <label className="field-label" htmlFor="program-name">Nom du programme</label>
@@ -215,12 +220,19 @@ export default async function ProgramsPage() {
                           primaryMuscles: opt.primaryMuscles,
                           primaryMusclesFr: opt.primaryMusclesFr,
                         }))}
+                        showReorderWalkthrough={Boolean(onboarding && onboarding.version >= 1 && onboarding.state.initialCompleted && !onboarding.state.reorderSeen && day.id === reorderDayId)}
                       />
                     )}
                   </details>
                 ))}
 
-                <details className="program-day-panel">
+                <form action={addProgramDayAction} data-onboarding-target="program-day" className="form-grid">
+                  <input type="hidden" name="programId" value={program.id} />
+                  <PrimaryButton type="submit">Ajouter une journée</PrimaryButton>
+                </form>
+
+                {program.days.length > 0 ? (
+                <details className="program-day-panel" data-onboarding-target="program-exercise">
                   <summary className="day-summary">
                     <span>Ajouter un exercice</span>
                     <span className="chip violet">Ouvrir</span>
@@ -232,11 +244,17 @@ export default async function ProgramsPage() {
                     action={addExerciseToProgramDayAction}
                   />
                 </details>
+                ) : null}
               </div>
             </ProgramCard>
           ))
         )}
       </section>
+      <ProgramsOnboarding
+        onboarding={onboarding}
+        programs={programs.length}
+        exercises={totalProgramExercises}
+      />
     </div>
   );
 }

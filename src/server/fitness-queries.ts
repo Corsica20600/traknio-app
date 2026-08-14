@@ -314,6 +314,10 @@ async function getOrCreateProfileForEmail(activeEmail: string, displayName: stri
     data: {
       displayName,
       email: activeEmail,
+      // Existing profiles receive the schema default (v1) during the additive
+      // migration. New accounts deliberately start at v0 so the brief welcome
+      // walkthrough can run exactly once.
+      onboardingVersion: 0,
       trainingLevel: "INTERMEDIATE",
       primaryGoal: "HYPERTROPHY",
       sessionsPerWeek: 4,

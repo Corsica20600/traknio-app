@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/src/lib/prisma";
 import { getOrCreateDemoProfile } from "@/src/server/fitness-queries";
+import { markOnboardingStepForProfile } from "@/src/server/onboarding-actions";
 
 export async function createSimpleProgramAction(formData: FormData) {
   const profile = await getOrCreateDemoProfile();
@@ -19,6 +20,8 @@ export async function createSimpleProgramAction(formData: FormData) {
       level: level as never,
       sessionsPerWeek: 1,
       status: "DRAFT",
+      // Preserve the established product flow: a new program is immediately
+      // usable and starts with one editable session.
       days: {
         create: [
           { dayIndex: 1, title: programName, focus: "A personnaliser" },
@@ -26,6 +29,7 @@ export async function createSimpleProgramAction(formData: FormData) {
       },
     },
   });
+  await markOnboardingStepForProfile(profile.id, "programCreateSeen");
 
   revalidatePath("/programs");
 }
@@ -180,6 +184,7 @@ export async function addExerciseToProgramDayAction(formData: FormData) {
       restSeconds: Number.isFinite(restSeconds) ? Math.max(15, Math.min(300, restSeconds)) : 90,
     },
   });
+  await markOnboardingStepForProfile(profile.id, "programExerciseSeen");
 
   revalidatePath("/programs");
 }
@@ -204,6 +209,7 @@ export async function addProgramDayAction(formData: FormData) {
       focus: "A personnaliser",
     },
   });
+  await markOnboardingStepForProfile(profile.id, "programDaySeen");
 
   revalidatePath("/programs");
 }
