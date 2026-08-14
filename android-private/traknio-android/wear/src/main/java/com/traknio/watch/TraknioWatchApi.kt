@@ -73,6 +73,10 @@ class TraknioWatchApi(
 
     suspend fun previousExercise(sessionId: String): WatchPayload = postAction("previous-exercise", "/api/watch/previous-exercise", sessionId)
 
+    suspend fun selectExercise(sessionId: String, exerciseIndex: Int): WatchPayload = postAction(
+        "select-exercise", "/api/watch/select-exercise", sessionId, mapOf("exerciseIndex" to exerciseIndex),
+    )
+
     suspend fun completeSession(sessionId: String): WatchPayload = postAction("complete-session", "/api/watch/complete-session", sessionId)
 
     suspend fun completePairing(pairingToken: String, label: String): PairingResult = withContext(Dispatchers.IO) {
@@ -129,6 +133,7 @@ class TraknioWatchApi(
             actualReps = extra["actualReps"] as? Int,
             weight = extra["weight"] as? Double,
             deltaSeconds = extra["deltaSeconds"] as? Int,
+            exerciseIndex = extra["exerciseIndex"] as? Int,
         )
         return executeWithFallback(request) { requestPayload(path, "POST", body, request.requestId) }
     }
@@ -217,7 +222,15 @@ class TraknioWatchApi(
             restUpdatedAt = json.optString("restUpdatedAt").takeIf { it.isNotBlank() },
             status = json.optString("status", "IN_PROGRESS"),
             summary = parseSummary(json.optJSONObject("summary")),
+            exercises = parseExercises(json.optJSONArray("exercises")),
         )
+    }
+
+    private fun parseExercises(items: org.json.JSONArray?): List<WatchExerciseSummary> = buildList {
+        for (index in 0 until (items?.length() ?: 0)) {
+            val item = items?.optJSONObject(index) ?: continue
+            add(WatchExerciseSummary(item.optInt("index"), item.optString("name"), item.optInt("totalSets", 1), item.optInt("completedSets"), item.optInt("activeSetIndex", 1), item.optInt("targetReps", 10), if (item.isNull("weight")) null else item.optDouble("weight")))
+        }
     }
 
     private fun parseSummary(json: JSONObject?): WatchSessionSummary? {

@@ -97,6 +97,10 @@ class WatchViewModel(context: Context) : ViewModel() {
 
     fun previousExercise() = perform("previous") { payload -> api.previousExercise(payload.sessionId) }
 
+    fun selectExercise(exerciseIndex: Int) = perform("select-exercise") { payload ->
+        api.selectExercise(payload.sessionId, exerciseIndex)
+    }
+
     fun requestFinish() {
         val ready = _state.value as? WatchScreenState.Ready ?: return
         _state.value = ready.copy(finishConfirm = true)

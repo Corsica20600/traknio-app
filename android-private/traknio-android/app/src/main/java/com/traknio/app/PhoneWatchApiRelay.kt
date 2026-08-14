@@ -28,6 +28,7 @@ data class PhoneWatchRelayRequest(
     val actualReps: Int?,
     val weight: Double?,
     val deltaSeconds: Int?,
+    val exerciseIndex: Int?,
     val sourceNodeId: String,
     val createdAtMs: Long,
 ) {
@@ -38,6 +39,7 @@ data class PhoneWatchRelayRequest(
         .put("actualReps", actualReps)
         .put("weight", weight)
         .put("deltaSeconds", deltaSeconds)
+        .put("exerciseIndex", exerciseIndex)
         .put("sourceNodeId", sourceNodeId)
         .put("createdAtMs", createdAtMs)
         .toString()
@@ -52,6 +54,7 @@ data class PhoneWatchRelayRequest(
                 actualReps = if (json.isNull("actualReps")) null else json.optInt("actualReps"),
                 weight = if (json.isNull("weight")) null else json.optDouble("weight"),
                 deltaSeconds = if (json.isNull("deltaSeconds")) null else json.optInt("deltaSeconds"),
+                exerciseIndex = if (json.isNull("exerciseIndex")) null else json.optInt("exerciseIndex"),
                 sourceNodeId = json.optString("sourceNodeId"),
                 createdAtMs = json.optLong("createdAtMs", System.currentTimeMillis()),
             )
@@ -171,6 +174,7 @@ class PhoneWatchRelayClient(private val context: Context) {
             "resume-rest" -> "/api/watch/resume-rest"
             "next-exercise" -> "/api/watch/next-exercise"
             "previous-exercise" -> "/api/watch/previous-exercise"
+            "select-exercise" -> "/api/watch/select-exercise"
             "complete-session" -> "/api/watch/complete-session"
             else -> return RelayExecution.FinalFailure(400, "Action montre inconnue")
         }
@@ -194,6 +198,7 @@ class PhoneWatchRelayClient(private val context: Context) {
                         .put("actualReps", request.actualReps)
                         .put("weight", request.weight)
                         .put("deltaSeconds", request.deltaSeconds)
+                        .put("exerciseIndex", request.exerciseIndex)
                         .toString())
                 }
             }

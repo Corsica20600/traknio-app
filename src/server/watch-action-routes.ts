@@ -6,6 +6,7 @@ import {
   nextWatchExercise,
   pauseWatchRest,
   previousWatchExercise,
+  selectWatchExercise,
   resumeWatchRest,
   skipWatchRest,
   validateWatchSet,
@@ -16,7 +17,7 @@ import { runIdempotentWatchAction, type WatchActionOperation, type WatchActionRe
 type WatchAccess = { userProfileId?: string };
 
 function revalidateWatchPaths(operation: WatchActionOperation) {
-  if (["validate-set", "update-live-target", "skip-rest", "adjust-rest", "pause-rest", "resume-rest", "complete-session"].includes(operation)) {
+  if (["validate-set", "update-live-target", "skip-rest", "adjust-rest", "pause-rest", "resume-rest", "select-exercise", "complete-session"].includes(operation)) {
     revalidatePath("/workout");
     revalidatePath("/dashboard");
     revalidatePath("/history");
@@ -41,6 +42,7 @@ export async function executeWatchActionRoute(input: {
     actualReps: body.actualReps == null ? null : Number(body.actualReps),
     weight: body.weight == null ? null : Number(body.weight),
     deltaSeconds: body.deltaSeconds == null ? null : Number(body.deltaSeconds),
+    exerciseIndex: body.exerciseIndex == null ? null : Number(body.exerciseIndex),
   };
 
   const result = await runIdempotentWatchAction({
@@ -71,6 +73,7 @@ export async function executeWatchActionRoute(input: {
           case "resume-rest": return resumeWatchRest(sessionId, userProfileId, tx);
           case "next-exercise": return nextWatchExercise(sessionId, userProfileId, tx);
           case "previous-exercise": return previousWatchExercise(sessionId, userProfileId, tx);
+          case "select-exercise": return selectWatchExercise(sessionId, canonicalPayload.exerciseIndex ?? 0, userProfileId, tx);
           case "complete-session": return completeWatchSession(sessionId, userProfileId, tx);
         }
       })();

@@ -92,6 +92,7 @@ data class WatchRelayRequest(
     val actualReps: Int? = null,
     val weight: Double? = null,
     val deltaSeconds: Int? = null,
+    val exerciseIndex: Int? = null,
 ) {
     fun toJson(): String = JSONObject()
         .put("requestId", requestId)
@@ -100,6 +101,7 @@ data class WatchRelayRequest(
         .put("actualReps", actualReps)
         .put("weight", weight)
         .put("deltaSeconds", deltaSeconds)
+        .put("exerciseIndex", exerciseIndex)
         .toString()
 }
 
@@ -165,6 +167,13 @@ object WatchPayloadJson {
                 level = summary.optInt("level", 1),
                 levelReached = summary.optBoolean("levelReached", false),
             )
+        },
+        exercises = buildList {
+            val items = json.optJSONArray("exercises")
+            for (index in 0 until (items?.length() ?: 0)) {
+                val item = items?.optJSONObject(index) ?: continue
+                add(WatchExerciseSummary(item.optInt("index"), item.optString("name"), item.optInt("totalSets", 1), item.optInt("completedSets"), item.optInt("activeSetIndex", 1), item.optInt("targetReps", 10), if (item.isNull("weight")) null else item.optDouble("weight")))
+            }
         },
     )
 }

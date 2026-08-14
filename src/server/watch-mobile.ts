@@ -26,6 +26,17 @@ type WatchPayload = {
   restUpdatedAt: string | null;
   status: string;
   summary?: WatchSessionSummary;
+  exercises: WatchExerciseSummary[];
+};
+
+type WatchExerciseSummary = {
+  index: number;
+  name: string;
+  totalSets: number;
+  completedSets: number;
+  activeSetIndex: number;
+  targetReps: number;
+  weight: number | null;
 };
 
 type WatchSessionSummary = {
@@ -313,6 +324,20 @@ export async function getWatchPayload(sessionId?: string, userProfileId?: string
     : { status: "IDLE" as const, remainingSeconds: 0, updatedAt: null };
   const restRemaining = getSharedRestRemaining(watchRest);
   const restStatus = restRemaining > 0 ? watchRest.status : "IDLE";
+  const exercises = ordered.map((item, index) => {
+    const completedSets = session.sets.filter((set) => set.exerciseId === item.exerciseId && set.isCompleted).length;
+    const itemTarget = liveTargets[item.programExerciseId ?? `exercise:${item.exerciseId}`];
+    const activeSetIndex = Math.min(item.totalSets, Math.max(1, completedSets + 1));
+    return {
+      index,
+      name: item.exerciseName,
+      totalSets: item.totalSets,
+      completedSets: Math.min(item.totalSets, completedSets),
+      activeSetIndex,
+      targetReps: itemTarget?.targetReps ?? item.targetReps,
+      weight: itemTarget?.targetWeightKg ?? item.plannedWeightKg,
+    };
+  });
 
   return {
     sessionId: session.id,
@@ -333,7 +358,24 @@ export async function getWatchPayload(sessionId?: string, userProfileId?: string
     restUpdatedAt: watchRest.updatedAt?.toISOString() ?? null,
     status: session.status === "IN_PROGRESS" && session.watchSession?.status === "PAUSED" ? "READY_TO_COMPLETE" : session.status,
     summary: await getWatchSessionSummary(session, db),
+    exercises,
   };
+}
+
+export async function selectWatchExercise(sessionId: string, exerciseIndex: number, userProfileId?: string, db: WatchDatabase = prisma) {
+  const session = await resolveSession(sessionId, userProfileId, db);
+  if (!session) return null;
+  const ordered = await getOrderedExercisesForSession(session, db);
+  if (!Number.isInteger(exerciseIndex) || exerciseIndex < 0 || exerciseIndex >= ordered.length) return null;
+  const index = exerciseIndex;
+  if (!ordered[index]) return null;
+  const completedSets = session.sets.filter((set) => set.exerciseId === ordered[index].exerciseId && set.isCompleted).length;
+  await db.watchSession.upsert({
+    where: { workoutSessionId: session.id },
+    update: { currentExerciseIndex: index, currentSetIndex: Math.min(ordered[index].totalSets, Math.max(1, completedSets + 1)), status: "ACTIVE", lastSyncAt: new Date() },
+    create: { workoutSessionId: session.id, currentExerciseIndex: index, currentSetIndex: Math.min(ordered[index].totalSets, Math.max(1, completedSets + 1)), status: "ACTIVE", lastSyncAt: new Date() },
+  });
+  return getWatchPayload(session.id, userProfileId, db);
 }
 
 export async function validateWatchSet(input: {

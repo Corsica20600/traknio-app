@@ -19,6 +19,17 @@ data class WatchPayload(
     val restUpdatedAt: String?,
     val status: String,
     val summary: WatchSessionSummary? = null,
+    val exercises: List<WatchExerciseSummary> = emptyList(),
+)
+
+data class WatchExerciseSummary(
+    val index: Int,
+    val name: String,
+    val totalSets: Int,
+    val completedSets: Int,
+    val activeSetIndex: Int,
+    val targetReps: Int,
+    val weight: Double?,
 )
 
 data class WatchSessionSummary(

@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -45,6 +46,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
+import androidx.wear.compose.foundation.lazy.items
+import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.Chip
@@ -191,6 +194,8 @@ private fun ReadyScreen(state: WatchScreenState.Ready, viewModel: WatchViewModel
     val isReadyToComplete = payload.status == "READY_TO_COMPLETE"
     val haptics = LocalHapticFeedback.current
     var wasResting by remember { mutableStateOf(isResting) }
+    var destination by remember(payload.sessionId) { mutableStateOf(WorkoutDestination.List) }
+    var detailExerciseIndex by remember(payload.sessionId) { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(isResting) {
         if (isResting && !wasResting) {
@@ -203,7 +208,81 @@ private fun ReadyScreen(state: WatchScreenState.Ready, viewModel: WatchViewModel
         isCompleted -> CompletedScreen(state, viewModel::refresh)
         isReadyToComplete -> ReadyToCompleteScreen(state, viewModel)
         isResting -> RestScreen(state, viewModel)
-        else -> ActiveSetScreen(state, viewModel)
+        else -> when (destination) {
+            WorkoutDestination.List -> WorkoutListScreen(payload, state.busyAction == null, onExercise = { index ->
+                detailExerciseIndex = index
+                destination = WorkoutDestination.Detail
+                viewModel.selectExercise(index)
+            })
+            WorkoutDestination.Detail -> ExerciseDetailScreen(payload, detailExerciseIndex, state.busyAction == null, onBack = { destination = WorkoutDestination.List }, onOpenActiveSet = { destination = WorkoutDestination.Set })
+            WorkoutDestination.Set -> ActiveSetScreen(state, viewModel, onBack = { destination = WorkoutDestination.Detail })
+        }
+    }
+}
+
+private enum class WorkoutDestination { List, Detail, Set }
+
+@Composable
+private fun WorkoutListScreen(payload: WatchPayload, enabled: Boolean, onExercise: (Int) -> Unit) {
+    // Never substitute a debug workout for an authenticated session. A server payload is
+    // authoritative: an incomplete payload still reports its real 1/13-style progress.
+    val exercises = payload.exercises.ifEmpty {
+        listOf(WatchExerciseSummary(payload.exerciseIndex - 1, payload.exerciseName, payload.totalSets, payload.setIndex - 1, payload.setIndex, payload.targetReps, payload.weight ?: payload.activeWeight))
+    }
+    val activeItemIndex = exercises.indexOfFirst { it.index == payload.exerciseIndex - 1 }.coerceAtLeast(0)
+    key(payload.sessionId, exercises.size, activeItemIndex) {
+        val listState = rememberScalingLazyListState(initialCenterItemIndex = activeItemIndex)
+        Box(modifier = Modifier.fillMaxSize()) {
+            ScalingLazyColumn(
+                modifier = Modifier.fillMaxSize().padding(top = 18.dp),
+                state = listState,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+        items(exercises, key = { it.index }) { exercise ->
+            val complete = exercise.completedSets >= exercise.totalSets
+            val active = exercise.index == payload.exerciseIndex - 1
+            Chip(
+                modifier = Modifier.fillMaxWidth(0.88f).height(if (active) 46.dp else 38.dp).padding(vertical = 1.dp),
+                label = {
+                    Column {
+                        Text(compactWearExerciseName(exercise.name), maxLines = 1, overflow = TextOverflow.Ellipsis, style = WearTypography.title.copy(fontSize = if (active) 11.sp else 9.sp, fontWeight = if (active) FontWeight.Black else FontWeight.Bold))
+                        Text(if (complete) "✓ ${exercise.completedSets}/${exercise.totalSets}" else if (active) "● ${exercise.completedSets}/${exercise.totalSets} · ${exercise.weight?.let { "${trimWeight(it)} kg" } ?: "charge libre"}" else "○ ${exercise.completedSets}/${exercise.totalSets}", color = if (active) Color(0xFFBFE6FF) else Color(0xFF8E9BB3), fontSize = 7.sp)
+                    }
+                },
+                colors = ChipDefaults.chipColors(backgroundColor = if (active) Color(0xFF163967) else Color(0xFF0C1629), contentColor = Color.White),
+                enabled = enabled,
+                onClick = { onExercise(exercise.index) },
+            )
+        }
+                item { Spacer(Modifier.height(8.dp)) }
+            }
+            Text("SÉANCE  ${exercises.count { it.completedSets >= it.totalSets }}/${payload.totalExercises}", modifier = Modifier.align(Alignment.TopCenter), color = Color(0xFFBFE6FF), style = WearTypography.accent.copy(fontSize = 11.sp))
+        }
+    }
+}
+
+@Composable
+private fun ExerciseDetailScreen(payload: WatchPayload, selectedIndex: Int?, enabled: Boolean, onBack: () -> Unit, onOpenActiveSet: () -> Unit) {
+    val exercise = payload.exercises.firstOrNull { it.index == selectedIndex }
+        ?: payload.exercises.getOrNull(payload.exerciseIndex - 1)
+    Box(modifier = Modifier.fillMaxSize()) {
+    ScalingLazyColumn(modifier = Modifier.fillMaxSize().padding(top = 47.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        items((1..(exercise?.totalSets ?: payload.totalSets)).toList()) { set ->
+            val done = set <= (exercise?.completedSets ?: 0)
+            val active = set == (exercise?.activeSetIndex ?: payload.setIndex)
+            Chip(
+                modifier = Modifier.fillMaxWidth(0.84f).height(36.dp).padding(vertical = 1.dp),
+                label = { Text("S$set   ${exercise?.targetReps ?: payload.targetReps} × ${exercise?.weight?.let { "${trimWeight(it)} kg" } ?: "—"}   ${if (done) "✓" else if (active) "●" else "○"}", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, fontSize = 10.sp, fontWeight = if (active) FontWeight.Black else FontWeight.Medium) },
+                colors = ChipDefaults.chipColors(backgroundColor = if (active) Color(0xFF163967) else Color(0xFF0C1629), contentColor = Color.White),
+                enabled = enabled && active,
+                onClick = onOpenActiveSet,
+            )
+        }
+    }
+        Column(modifier = Modifier.align(Alignment.TopCenter), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("‹  Séance", modifier = Modifier.height(22.dp).clickable(enabled = enabled, onClick = onBack), color = Color(0xFF9CCBFF), style = WearTypography.accent.copy(fontSize = 9.sp))
+            Text(compactWearExerciseName(exercise?.name ?: payload.exerciseName), textAlign = TextAlign.Center, style = WearTypography.title.copy(fontSize = 13.sp), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
@@ -224,7 +303,7 @@ private fun ReadyToCompleteScreen(state: WatchScreenState.Ready, viewModel: Watc
 }
 
 @Composable
-private fun ActiveSetScreen(state: WatchScreenState.Ready, viewModel: WatchViewModel) {
+private fun ActiveSetScreen(state: WatchScreenState.Ready, viewModel: WatchViewModel, onBack: () -> Unit) {
     val payload = state.payload
     val enabled = state.busyAction == null
     val initialWeight = (payload.weight ?: payload.activeWeight ?: 0.0).coerceAtLeast(0.0)
@@ -281,6 +360,7 @@ private fun ActiveSetScreen(state: WatchScreenState.Ready, viewModel: WatchViewM
             onEditReps = { editor = SetEditor.Reps },
             onEditWeight = { editor = SetEditor.Weight },
             onValidate = { viewModel.validateSet(reps, weight) },
+            onBack = onBack,
         )
     }
 }
@@ -298,6 +378,7 @@ private fun ActiveSetContent(
     onEditReps: () -> Unit,
     onEditWeight: () -> Unit,
     onValidate: () -> Unit,
+    onBack: () -> Unit = {},
 ) {
     Column(
         // WatchChrome already reserves the round safe area and the TimeText. Adding a second
@@ -309,6 +390,7 @@ private fun ActiveSetContent(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            Text("‹ Séries", modifier = Modifier.clickable(onClick = onBack), color = Color(0xFF9CCBFF), fontSize = 8.sp)
             WearExerciseTitle(exerciseName)
             Text(
                 text = "SÉRIE $setIndex/$totalSets",
@@ -326,11 +408,9 @@ private fun ActiveSetContent(
             Text(
                 text = "$reps",
                 modifier = Modifier.clickable(enabled = enabled, onClick = onEditReps),
-                fontSize = 40.sp,
-                fontWeight = FontWeight.Black,
-                lineHeight = 40.sp,
+                style = WearTypography.display,
             )
-            Text("RÉPÉTITIONS", color = Color(0xFF9EAFCC), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
+            Text("RÉPÉTITIONS", color = Color(0xFF9EAFCC), style = WearTypography.label)
             WearValueButton(
                 text = if (isBodyweight && weight <= 0) "Poids du corps  ›" else "${trimWeight(weight)} kg  ›",
                 enabled = enabled,
@@ -546,6 +626,31 @@ private fun ActiveSetRoundPreview() {
         }
     }
 }
+
+@Preview(name = "Liste séance · Galaxy Watch Ultra", widthDp = 240, heightDp = 240, showBackground = true)
+@Composable
+private fun WorkoutListUltraPreview() {
+    MaterialTheme { WatchChrome { WorkoutListScreen(
+        payload = previewWorkoutPayload(), enabled = true, onExercise = {},
+    ) } }
+}
+
+@Preview(name = "Détail exercice · Galaxy Watch Ultra", widthDp = 240, heightDp = 240, showBackground = true)
+@Composable
+private fun ExerciseDetailUltraPreview() {
+    MaterialTheme { WatchChrome { ExerciseDetailScreen(previewWorkoutPayload(), 1, true, {}, {}) } }
+}
+
+private fun previewWorkoutPayload() = WatchPayload(
+    sessionId = "preview", workoutTitle = "Push", exerciseName = "Hack Squat", exerciseIndex = 2, totalExercises = 8,
+    setIndex = 3, totalSets = 3, targetReps = 12, weight = 100.0, activeWeight = 100.0, proposedWeight = null,
+    weightConfirmationRequired = false, isBodyweight = false, restRemaining = 0, restStatus = "IDLE", restUpdatedAt = null, status = "IN_PROGRESS",
+    exercises = listOf(
+        WatchExerciseSummary(0, "Développé incliné · haltères", 4, 4, 4, 10, 40.0),
+        WatchExerciseSummary(1, "Hack Squat", 3, 2, 3, 12, 100.0),
+        WatchExerciseSummary(2, "Rowing à la poulie en hauteur", 3, 0, 1, 12, 80.0),
+    ),
+)
 
 @Preview(name = "Active set · 480px XL Round", widthDp = 240, heightDp = 240, showBackground = true)
 @Composable

@@ -11,6 +11,7 @@ export type WatchActionOperation =
   | "resume-rest"
   | "next-exercise"
   | "previous-exercise"
+  | "select-exercise"
   | "complete-session";
 
 type StoredResponse = {
