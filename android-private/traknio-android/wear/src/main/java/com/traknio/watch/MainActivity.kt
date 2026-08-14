@@ -232,6 +232,16 @@ private fun ActiveSetScreen(state: WatchScreenState.Ready, viewModel: WatchViewM
     var weight by remember(payload.sessionId, payload.exerciseIndex, payload.setIndex) { mutableStateOf(initialWeight) }
     var editor by remember { mutableStateOf<SetEditor?>(null) }
 
+    // A phone update changes the payload without changing the active set key. Keep the
+    // displayed target aligned with that authoritative payload, except while the wearer
+    // is actively adjusting a value in the editor.
+    LaunchedEffect(payload.targetReps, initialWeight, editor) {
+        if (editor == null) {
+            reps = payload.targetReps
+            weight = initialWeight
+        }
+    }
+
     when (editor) {
         SetEditor.Reps -> ValueEditorScreen(
             label = "RÉPÉTITIONS",
