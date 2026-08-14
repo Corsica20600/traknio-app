@@ -30,13 +30,13 @@ class TraknioWatchApi(
         )
     }
 
-    suspend fun validateSet(payload: WatchPayload): WatchPayload = postAction(
+    suspend fun validateSet(payload: WatchPayload, actualReps: Int, weight: Double?): WatchPayload = postAction(
         operation = "validate-set",
         path = "/api/watch/validate-set",
         sessionId = payload.sessionId,
         extra = mapOf(
-            "actualReps" to payload.targetReps,
-            "weight" to payload.weight,
+            "actualReps" to actualReps,
+            "weight" to weight,
         ),
     )
 

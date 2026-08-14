@@ -89,8 +89,19 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         if (::binding.isInitialized) {
             binding.webViewTraknio.onPause()
+            CookieManager.getInstance().flush()
         }
         super.onPause()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+
+        val authCallbackUrl = getAuthCallbackUrl(intent) ?: return
+        // Do not log the URL: it contains OAuth state and authorization parameters.
+        Log.i("TraknioAuth", "OAuth callback received; completing it in the WebView")
+        binding.webViewTraknio.loadUrl(authCallbackUrl)
     }
 
     private fun applyDarkSystemBars() {
@@ -168,6 +179,9 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 updateWorkoutScreenPolicy(url)
+                // Auth.js writes its persistent, HttpOnly session cookie during the callback.
+                // Explicitly flush it so it survives process termination and normal device reboot.
+                CookieManager.getInstance().flush()
                 PhoneWearAccountSync.broadcastConnectedAccount(applicationContext)
                 binding.webLoading.visibility = View.GONE
                 hideLaunchOverlay()
@@ -281,6 +295,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         fileChooserCallback?.onReceiveValue(null)
         fileChooserCallback = null
+        CookieManager.getInstance().flush()
         super.onDestroy()
     }
 
@@ -306,10 +321,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun buildInitialUrl(): String {
+        getAuthCallbackUrl(intent)?.let { return it }
         val path = intent.getStringExtra(EXTRA_INITIAL_PATH)?.trim().orEmpty()
         if (path.isBlank()) return "$traknioUrl/dashboard"
         val safePath = if (path.startsWith("/")) path else "/$path"
         return traknioUrl + safePath
+    }
+
+    private fun getAuthCallbackUrl(intent: Intent): String? {
+        val uri = intent.data ?: return null
+        return uri.takeIf(::isTraknioAuthCallback)?.toString()
+    }
+
+    private fun isTraknioAuthCallback(uri: Uri): Boolean {
+        val scheme = uri.scheme?.lowercase()
+        val host = uri.host?.lowercase()
+        return scheme == "https" &&
+            host in allowedHosts &&
+            uri.path?.startsWith("/api/auth/callback/") == true
     }
 
     private fun handleNavigationUrl(rawUrl: String): Boolean {

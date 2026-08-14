@@ -6,6 +6,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -114,6 +116,7 @@ private fun WatchChrome(
     compact: Boolean = false,
     content: @Composable () -> Unit,
 ) {
+    val isRound = LocalConfiguration.current.isScreenRound
     Scaffold(
         timeText = { TimeText(modifier = Modifier.padding(top = 4.dp)) },
         vignette = { Vignette(vignettePosition = VignettePosition.TopAndBottom) },
@@ -131,8 +134,8 @@ private fun WatchChrome(
                     ),
                 )
                 .padding(
-                    horizontal = 18.dp,
-                    vertical = if (compact) 10.dp else 28.dp,
+                    horizontal = if (isRound) 25.dp else 18.dp,
+                    vertical = if (compact) 10.dp else if (isRound) 30.dp else 24.dp,
                 ),
             contentAlignment = Alignment.Center,
         ) {
@@ -214,7 +217,7 @@ private fun ReadyToCompleteScreen(state: WatchScreenState.Ready, viewModel: Watc
     ) {
         Text("Séance", fontSize = 18.sp, color = Color(0xFFB7C9EA))
         Text("complète", fontSize = 25.sp, fontWeight = FontWeight.Black)
-        Text(state.syncLabel, color = Color(0xFF56F0C2), fontSize = 12.sp)
+        if (state.error != null) Text(state.error, color = Color(0xFFFFB86B), fontSize = 10.sp)
         Spacer(Modifier.height(10.dp))
         BigActionButton(if (state.busyAction == "finish") "..." else "Terminer la séance", enabled, viewModel::completeSession)
     }
@@ -224,75 +227,144 @@ private fun ReadyToCompleteScreen(state: WatchScreenState.Ready, viewModel: Watc
 private fun ActiveSetScreen(state: WatchScreenState.Ready, viewModel: WatchViewModel) {
     val payload = state.payload
     val enabled = state.busyAction == null
+    val initialWeight = (payload.activeWeight ?: payload.weight ?: 0.0).coerceAtLeast(0.0)
+    var reps by remember(payload.sessionId, payload.exerciseIndex, payload.setIndex) { mutableStateOf(payload.targetReps) }
+    var weight by remember(payload.sessionId, payload.exerciseIndex, payload.setIndex) { mutableStateOf(initialWeight) }
+    var editor by remember { mutableStateOf<SetEditor?>(null) }
 
+    when (editor) {
+        SetEditor.Reps -> ValueEditorScreen(
+            label = "RÉPÉTITIONS",
+            value = reps.toDouble(),
+            unit = "reps",
+            decrement = 1.0,
+            increment = 1.0,
+            minimum = 1.0,
+            onValueChange = { reps = it.toInt() },
+            onDone = { editor = null },
+        )
+        SetEditor.Weight -> ValueEditorScreen(
+            label = "CHARGE",
+            value = weight,
+            unit = "kg",
+            decrement = 2.5,
+            increment = 2.5,
+            minimum = 0.0,
+            onValueChange = { weight = it },
+            onDone = { editor = null },
+        )
+        null -> ActiveSetContent(
+            exerciseName = payload.exerciseName,
+            setIndex = payload.setIndex,
+            totalSets = payload.totalSets,
+            reps = reps,
+            weight = weight,
+            isBodyweight = payload.isBodyweight,
+            enabled = enabled,
+            error = state.error,
+            onEditReps = { editor = SetEditor.Reps },
+            onEditWeight = { editor = SetEditor.Weight },
+            onValidate = { viewModel.validateSet(reps, weight) },
+        )
+    }
+}
+
+@Composable
+private fun ActiveSetContent(
+    exerciseName: String,
+    setIndex: Int,
+    totalSets: Int,
+    reps: Int,
+    weight: Double,
+    isBodyweight: Boolean,
+    enabled: Boolean,
+    error: String?,
+    onEditReps: () -> Unit,
+    onEditWeight: () -> Unit,
+    onValidate: () -> Unit,
+) {
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Header(payload.exerciseName, state.syncLabel, state.error)
-        Spacer(Modifier.height(4.dp))
-
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = "Série ${payload.setIndex}/${payload.totalSets}",
-                color = Color(0xFF9CCBFF),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = "${payload.targetReps}",
-                fontSize = 48.sp,
-                fontWeight = FontWeight.Black,
-                lineHeight = 48.sp,
-            )
-            Text(
-                text = "répétitions",
-                color = Color(0xFFEAF3FF),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            ActiveWeight(payload)
+        WearExerciseTitle(exerciseName)
+        Text(
+            text = "SÉRIE $setIndex/$totalSets",
+            color = Color(0xFF9CCBFF),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 3.dp),
+        )
+        Text(
+            text = "$reps",
+            modifier = Modifier
+                .padding(top = 1.dp)
+                .clickable(enabled = enabled, onClick = onEditReps),
+            fontSize = 54.sp,
+            fontWeight = FontWeight.Black,
+            lineHeight = 54.sp,
+        )
+        Text("RÉPÉTITIONS", color = Color(0xFFB7C9EA), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        WearValueButton(
+            text = if (isBodyweight && weight <= 0) "Poids du corps" else "${trimWeight(weight)} kg",
+            enabled = enabled,
+            onClick = onEditWeight,
+            modifier = Modifier.padding(top = 5.dp),
+        )
+        if (error != null) {
+            Text(error, color = Color(0xFFFFB86B), fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
+        BigActionButton("VALIDER", enabled = enabled, onClick = onValidate, modifier = Modifier.padding(top = 7.dp))
+    }
+}
 
-        Spacer(Modifier.height(6.dp))
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            BigActionButton("Valider", enabled = enabled, onClick = viewModel::validateSet)
-            Spacer(Modifier.height(5.dp))
-            FinishSessionChip(state, viewModel)
+private enum class SetEditor { Reps, Weight }
+
+@Composable
+private fun ValueEditorScreen(
+    label: String,
+    value: Double,
+    unit: String,
+    decrement: Double,
+    increment: Double,
+    minimum: Double,
+    onValueChange: (Double) -> Unit,
+    onDone: () -> Unit,
+) {
+    val haptics = LocalHapticFeedback.current
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(label, color = Color(0xFF9CCBFF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Text(trimWeight(value), fontSize = 54.sp, fontWeight = FontWeight.Black, lineHeight = 54.sp)
+        Text(unit, color = Color(0xFFB7C9EA), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Row(
+            modifier = Modifier.padding(top = 9.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            EditorStepButton("−${trimWeight(decrement)}", onClick = {
+                onValueChange((value - decrement).coerceAtLeast(minimum))
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            })
+            EditorStepButton("+${trimWeight(increment)}", onClick = {
+                onValueChange(value + increment)
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            })
         }
+        BigActionButton("OK", enabled = true, onClick = onDone, modifier = Modifier.padding(top = 9.dp))
     }
 }
 
 @Composable
-private fun ActiveWeight(payload: WatchPayload) {
-    val activeWeight = payload.activeWeight ?: payload.weight
-    Text("Charge active", color = Color(0xFF9CCBFF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-    Text(
-        text = when {
-            activeWeight != null && activeWeight > 0 -> "${trimWeight(activeWeight)} kg"
-            payload.isBodyweight -> "Poids du corps"
-            else -> "Charge à confirmer"
-        },
-        color = Color(0xFFEAF3FF),
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Bold,
-    )
-    if (payload.weightConfirmationRequired && payload.proposedWeight != null) {
-        Spacer(Modifier.height(3.dp))
-        Box(
-            modifier = Modifier
-                .background(Color(0xFF30215F), RoundedCornerShape(12.dp))
-                .padding(horizontal = 9.dp, vertical = 4.dp),
-        ) {
-            Text(
-                text = "Nouveau poids : ${trimWeight(payload.proposedWeight)} kg · À confirmer",
-                color = Color(0xFFF0E8FF),
-                fontSize = 9.sp,
-                textAlign = TextAlign.Center,
-            )
-        }
-    }
+private fun EditorStepButton(text: String, onClick: () -> Unit) {
+    Button(
+        modifier = Modifier.size(width = 76.dp, height = 48.dp),
+        colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF152C56), contentColor = Color.White),
+        onClick = onClick,
+    ) { Text(text, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
 }
 
 @Composable
@@ -303,7 +375,6 @@ private fun RestScreen(state: WatchScreenState.Ready, viewModel: WatchViewModel)
         remainingSeconds = state.displayRestRemaining,
         isPaused = state.pausedRestRemaining != null,
         exerciseName = state.payload.exerciseName,
-        syncLabel = state.syncLabel,
         error = state.error,
         isSkipping = state.busyAction == "skip-rest",
         enabled = enabled,
@@ -319,7 +390,6 @@ private fun RestScreenContent(
     remainingSeconds: Int,
     isPaused: Boolean,
     exerciseName: String,
-    syncLabel: String,
     error: String?,
     isSkipping: Boolean,
     enabled: Boolean,
@@ -333,7 +403,7 @@ private fun RestScreenContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Header("Repos", syncLabel, error)
+        WearScreenLabel("Repos", error)
         Spacer(Modifier.height(2.dp))
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -345,7 +415,7 @@ private fun RestScreenContent(
                 lineHeight = 48.sp,
             )
             Text(
-                text = if (isPaused) "Chrono en pause" else "Exercice : $exerciseName",
+                text = if (isPaused) "Chrono en pause" else compactWearExerciseName(exerciseName),
                 color = Color(0xFFB7C9EA),
                 fontSize = 9.sp,
                 maxLines = 1,
@@ -408,7 +478,6 @@ private fun RestScreenInitialPreview() {
                 remainingSeconds = 90,
                 isPaused = false,
                 exerciseName = "Développé couché",
-                syncLabel = "Synchronisé",
                 error = null,
                 isSkipping = false,
                 enabled = true,
@@ -416,6 +485,100 @@ private fun RestScreenInitialPreview() {
                 onTogglePause = {},
                 onAddRest = {},
                 onSkipRest = {},
+            )
+        }
+    }
+}
+
+@Preview(name = "Active set · petite ronde", device = "id:wearos_small_round", widthDp = 192, heightDp = 192, showBackground = true)
+@Preview(name = "Active set · grande ronde", device = "id:wearos_large_round", widthDp = 227, heightDp = 227, showBackground = true)
+@Preview(name = "Active set · Galaxy Watch Ultra", widthDp = 227, heightDp = 227, showBackground = true)
+@Composable
+private fun ActiveSetRoundPreview() {
+    MaterialTheme {
+        WatchChrome {
+            ActiveSetContent(
+                exerciseName = "Soulevé de terre jambes tendues avec haltères",
+                setIndex = 1,
+                totalSets = 3,
+                reps = 10,
+                weight = 40.0,
+                isBodyweight = false,
+                enabled = true,
+                error = null,
+                onEditReps = {},
+                onEditWeight = {},
+                onValidate = {},
+            )
+        }
+    }
+}
+
+@Preview(name = "Active set · extension triceps", widthDp = 227, heightDp = 227, showBackground = true)
+@Composable
+private fun ActiveSetLongNamesPreview() {
+    MaterialTheme {
+        WatchChrome {
+            ActiveSetContent(
+                exerciseName = "Extension triceps debout avec haltères",
+                setIndex = 3,
+                totalSets = 3,
+                reps = 8,
+                weight = 32.0,
+                isBodyweight = false,
+                enabled = true,
+                error = null,
+                onEditReps = {},
+                onEditWeight = {},
+                onValidate = {},
+            )
+        }
+    }
+}
+
+@Preview(name = "Active set · rowing poulie", widthDp = 227, heightDp = 227, showBackground = true)
+@Composable
+private fun ActiveSetRowingPreview() {
+    MaterialTheme {
+        WatchChrome {
+            ActiveSetContent(
+                exerciseName = "Rowing à la poulie en hauteur",
+                setIndex = 1,
+                totalSets = 3,
+                reps = 10,
+                weight = 40.0,
+                isBodyweight = false,
+                enabled = true,
+                error = null,
+                onEditReps = {},
+                onEditWeight = {},
+                onValidate = {},
+            )
+        }
+    }
+}
+
+@Preview(name = "Repos · petite ronde", device = "id:wearos_small_round", widthDp = 192, heightDp = 192, showBackground = true)
+@Preview(name = "Repos · grande ronde", device = "id:wearos_large_round", widthDp = 227, heightDp = 227, showBackground = true)
+@Preview(name = "Repos · Galaxy Watch Ultra", widthDp = 227, heightDp = 227, showBackground = true)
+@Composable
+private fun RestScreenRoundPreview() = RestScreenInitialPreview()
+
+@Preview(name = "Charge · Galaxy Watch Ultra", widthDp = 227, heightDp = 227, showBackground = true)
+@Preview(name = "Répétitions · grande ronde", device = "id:wearos_large_round", widthDp = 227, heightDp = 227, showBackground = true)
+@Composable
+private fun ValueEditorRoundPreview() {
+    MaterialTheme {
+        WatchChrome {
+            ValueEditorScreen(
+                label = "CHARGE",
+                value = 32.0,
+                unit = "kg",
+                decrement = 2.5,
+                increment = 2.5,
+                minimum = 0.0,
+                onValueChange = {},
+                onDone = {},
             )
         }
     }
@@ -471,13 +634,10 @@ private fun CompletedScreen(state: WatchScreenState.Ready, onRefresh: () -> Unit
                 fontWeight = FontWeight.Bold,
             )
         }
-        item {
-            Text(
-                text = finalSyncLabel(state),
-                color = finalSyncColor(state),
-                fontSize = 8.sp,
-                modifier = Modifier.padding(top = 1.dp),
-            )
+        if (state.error != null) {
+            item {
+                Text(state.error, color = Color(0xFFFFB86B), fontSize = 8.sp, modifier = Modifier.padding(top = 1.dp))
+            }
         }
         if (summary != null) {
             item {
@@ -636,25 +796,26 @@ private fun FinalActionChip(onClick: () -> Unit, enabled: Boolean) {
 }
 
 @Composable
-private fun Header(title: String, syncLabel: String, error: String?) {
+private fun WearExerciseTitle(title: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            text = title.cleanExerciseTitle(),
-            modifier = Modifier.fillMaxWidth(0.82f),
+            text = compactWearExerciseName(title),
+            modifier = Modifier.fillMaxWidth(0.78f),
             textAlign = TextAlign.Center,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            fontSize = 12.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Black,
-            lineHeight = 13.sp,
+            lineHeight = 15.sp,
         )
-        Text(
-            text = error ?: syncLabel,
-            color = if (error == null) Color(0xFF56F0C2) else Color(0xFFFFB86B),
-            fontSize = 9.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+    }
+}
+
+@Composable
+private fun WearScreenLabel(title: String, error: String?) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(title, fontSize = 14.sp, fontWeight = FontWeight.Black)
+        if (error != null) Text(error, color = Color(0xFFFFB86B), fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -668,19 +829,6 @@ private fun FinishSessionChip(state: WatchScreenState.Ready, viewModel: WatchVie
             if (state.finishConfirm) viewModel.completeSession() else viewModel.requestFinish()
         },
     )
-}
-
-private fun finalSyncLabel(state: WatchScreenState.Ready): String = when {
-    state.error != null || state.syncLabel in setOf("Erreur", "Échec") -> "Échec de synchronisation"
-    state.syncLabel.contains("téléphone", ignoreCase = true) -> "En attente du téléphone"
-    state.syncLabel.contains("réseau", ignoreCase = true) -> "En attente du réseau"
-    else -> "Synchronisé"
-}
-
-private fun finalSyncColor(state: WatchScreenState.Ready): Color = when (finalSyncLabel(state)) {
-    "Synchronisé" -> Color(0xFF56F0C2)
-    "Échec de synchronisation" -> Color(0xFFFFB86B)
-    else -> Color(0xFF9CCBFF)
 }
 
 @Composable
@@ -705,12 +853,12 @@ private fun NavRow(state: WatchScreenState.Ready, viewModel: WatchViewModel) {
 }
 
 @Composable
-private fun BigActionButton(text: String, enabled: Boolean, onClick: () -> Unit) {
+private fun BigActionButton(text: String, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val haptics = LocalHapticFeedback.current
     Button(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth(0.70f)
-            .height(38.dp),
+            .height(48.dp),
         enabled = enabled,
         colors = ButtonDefaults.buttonColors(
             backgroundColor = Color(0xFF2E8BFF),
@@ -724,6 +872,20 @@ private fun BigActionButton(text: String, enabled: Boolean, onClick: () -> Unit)
     ) {
         Text(text, fontSize = 14.sp, fontWeight = FontWeight.Black)
     }
+}
+
+@Composable
+private fun WearValueButton(text: String, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Button(
+        modifier = modifier.size(width = 126.dp, height = 48.dp),
+        enabled = enabled,
+        colors = ButtonDefaults.buttonColors(
+            backgroundColor = Color(0xFF152C56),
+            contentColor = Color.White,
+            disabledBackgroundColor = Color(0xFF1B2437),
+        ),
+        onClick = onClick,
+    ) { Text(text, fontSize = 17.sp, fontWeight = FontWeight.Black) }
 }
 
 @Composable
@@ -784,6 +946,15 @@ private fun String.cleanExerciseTitle(): String {
     return replace(Regex("\\([^)]*\\)"), "")
         .replace("-", " ")
         .trim()
+}
+
+private fun compactWearExerciseName(name: String): String {
+    val cleaned = name.cleanExerciseTitle().replace(Regex("\\s+"), " ")
+    return cleaned
+        .replace(" avec haltères", " · haltères", ignoreCase = true)
+        .replace(" avec halteres", " · haltères", ignoreCase = true)
+        .replace(" à la poulie en hauteur", " · poulie haute", ignoreCase = true)
+        .replace(" · · ", " · ")
 }
 
 private fun trimWeight(value: Double): String {

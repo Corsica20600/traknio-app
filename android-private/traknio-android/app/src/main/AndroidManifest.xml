@@ -29,10 +29,25 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!--
+                Google OAuth is completed by the system browser. Route the HTTPS callback back
+                to this activity so the WebView that created the OAuth state can finish it and
+                receive the Auth.js session cookie in its own cookie store.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="www.traknio.com"
+                    android:pathPrefix="/api/auth/callback/"
+                    android:scheme="https" />
             </intent-filter>
         </activity>
         <activity

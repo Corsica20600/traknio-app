@@ -51,7 +51,9 @@ class WatchViewModel(context: Context) : ViewModel() {
         viewModelScope.launch { fetchState(silent = false) }
     }
 
-    fun validateSet() = perform("validate") { payload -> api.validateSet(payload) }
+    fun validateSet(actualReps: Int, weight: Double?) = perform("validate") { payload ->
+        api.validateSet(payload, actualReps.coerceAtLeast(1), weight?.coerceAtLeast(0.0))
+    }
 
     fun skipRest() = perform(
         "skip-rest",
