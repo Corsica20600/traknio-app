@@ -66,9 +66,7 @@ class WatchPhoneRelayClient(context: Context) {
             Log.i(TAG, "relay request sent request=${request.requestId.takeLast(8)}")
             WatchRelayEvents.emit(PhoneRelayResult(request.requestId, "WAITING_PHONE", null, null, null))
 
-            when (val result = withTimeout(INITIAL_RESPONSE_TIMEOUT_MS) { response.await() }) {
-                else -> result.toPayloadOrThrow()
-            }
+            withTimeout(INITIAL_RESPONSE_TIMEOUT_MS) { response.await() }.toPayloadOrThrow()
         } catch (_: TimeoutCancellationException) {
             throw WatchPhoneUnavailableException("Le téléphone ne répond pas")
         } finally {

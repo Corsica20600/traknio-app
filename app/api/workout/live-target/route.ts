@@ -3,6 +3,21 @@ import { prisma } from "@/src/lib/prisma";
 import { getOrCreateDemoProfile } from "@/src/server/fitness-queries";
 import { parseSessionNotesMeta, serializeSessionNotesMeta } from "@/src/server/session-exercise-replacements";
 
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const sessionId = searchParams.get("sessionId")?.trim() ?? "";
+  const exerciseId = searchParams.get("exerciseId")?.trim() ?? "";
+  const programExerciseId = searchParams.get("programExerciseId")?.trim() ?? "";
+  const setIndex = Math.max(1, Math.floor(Number(searchParams.get("setIndex") ?? 1)));
+  if (!sessionId || !exerciseId) return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
+  const profile = await getOrCreateDemoProfile();
+  const session = await prisma.workoutSession.findFirst({ where: { id: sessionId, userProfileId: profile.id, status: "IN_PROGRESS" } });
+  if (!session) return NextResponse.json({ error: "session_not_found" }, { status: 404 });
+  const target = parseSessionNotesMeta(session.notes).liveTargets?.[programExerciseId || `exercise:${exerciseId}`];
+  if (!target || target.exerciseId !== exerciseId || target.setIndex !== setIndex) return NextResponse.json({ target: null });
+  return NextResponse.json({ target }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+}
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({})) as {
     sessionId?: string;

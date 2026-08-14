@@ -290,38 +290,55 @@ private fun ActiveSetContent(
     onValidate: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 8.dp),
+        // WatchChrome already reserves the round safe area and the TimeText. Adding a second
+        // vertical inset here reduced the real XL-round content area below 180 dp.
+        modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
     ) {
-        WearExerciseTitle(exerciseName)
-        Text(
-            text = "SÉRIE $setIndex/$totalSets",
-            color = Color(0xFF9CCBFF),
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 3.dp),
-        )
-        Text(
-            text = "$reps",
-            modifier = Modifier
-                .padding(top = 1.dp)
-                .clickable(enabled = enabled, onClick = onEditReps),
-            fontSize = 46.sp,
-            fontWeight = FontWeight.Black,
-            lineHeight = 46.sp,
-        )
-        Text("RÉPÉTITIONS", color = Color(0xFFB7C9EA), fontSize = 8.sp, fontWeight = FontWeight.Bold)
-        WearValueButton(
-            text = if (isBodyweight && weight <= 0) "Poids du corps" else "${trimWeight(weight)} kg",
-            enabled = enabled,
-            onClick = onEditWeight,
-            modifier = Modifier.padding(top = 2.dp),
-        )
-        if (error != null) {
-            Text(error, color = Color(0xFFFFB86B), fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // Zone haute : son contenu garde sa taille naturelle et ne recouvre jamais les actions.
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            WearExerciseTitle(exerciseName)
+            Text(
+                text = "SÉRIE $setIndex/$totalSets",
+                color = Color(0xFFBFE6FF),
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 2.dp).background(Color(0x332E8BFF), RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 2.dp),
+            )
         }
-        BigActionButton("VALIDER", enabled = enabled, onClick = onValidate, modifier = Modifier.padding(top = 4.dp))
+
+        // Zone centrale : elle absorbe uniquement l'espace restant entre le contexte et l'action.
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = "$reps",
+                modifier = Modifier.clickable(enabled = enabled, onClick = onEditReps),
+                fontSize = 40.sp,
+                fontWeight = FontWeight.Black,
+                lineHeight = 40.sp,
+            )
+            Text("RÉPÉTITIONS", color = Color(0xFF9EAFCC), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
+            WearValueButton(
+                text = if (isBodyweight && weight <= 0) "Poids du corps  ›" else "${trimWeight(weight)} kg  ›",
+                enabled = enabled,
+                onClick = onEditWeight,
+                modifier = Modifier.padding(top = 1.dp).height(36.dp),
+            )
+        }
+
+        Spacer(Modifier.height(8.dp))
+        // Zone basse fixe : minimum 48 dp, distincte du bloc de charge.
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (error != null) {
+                Text(error, color = Color(0xFFFFB86B), fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            BigActionButton("VALIDER", enabled = enabled, onClick = onValidate)
+        }
     }
 }
 
@@ -468,7 +485,7 @@ private fun CompactRestSkipChip(text: String, onClick: () -> Unit, enabled: Bool
         },
         enabled = enabled,
         colors = ChipDefaults.primaryChipColors(
-            backgroundColor = Color(0xFF2E8BFF),
+            backgroundColor = Color(0xFF267DE8),
             contentColor = Color.White,
         ),
         onClick = onClick,
@@ -509,6 +526,28 @@ private fun ActiveSetRoundPreview() {
                 totalSets = 3,
                 reps = 10,
                 weight = 40.0,
+                isBodyweight = false,
+                enabled = true,
+                error = null,
+                onEditReps = {},
+                onEditWeight = {},
+                onValidate = {},
+            )
+        }
+    }
+}
+
+@Preview(name = "Active set · 480px XL Round", widthDp = 240, heightDp = 240, showBackground = true)
+@Composable
+private fun ActiveSetUltra480Preview() {
+    MaterialTheme {
+        WatchChrome {
+            ActiveSetContent(
+                exerciseName = "Développé incliné · haltères",
+                setIndex = 3,
+                totalSets = 3,
+                reps = 8,
+                weight = 80.0,
                 isBodyweight = false,
                 enabled = true,
                 error = null,
@@ -810,9 +849,9 @@ private fun WearExerciseTitle(title: String) {
             textAlign = TextAlign.Center,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            fontSize = 14.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.Black,
-            lineHeight = 15.sp,
+            lineHeight = 14.sp,
         )
     }
 }
@@ -876,7 +915,7 @@ private fun BigActionButton(text: String, enabled: Boolean, onClick: () -> Unit,
             onClick()
         },
     ) {
-        Text(text, fontSize = 14.sp, fontWeight = FontWeight.Black)
+        Text(text, fontSize = 13.sp, fontWeight = FontWeight.Black, letterSpacing = 0.6.sp)
     }
 }
 
@@ -886,12 +925,12 @@ private fun WearValueButton(text: String, enabled: Boolean, onClick: () -> Unit,
         modifier = modifier.size(width = 126.dp, height = 48.dp),
         enabled = enabled,
         colors = ButtonDefaults.buttonColors(
-            backgroundColor = Color(0xFF152C56),
+            backgroundColor = Color(0xFF183866),
             contentColor = Color.White,
             disabledBackgroundColor = Color(0xFF1B2437),
         ),
         onClick = onClick,
-    ) { Text(text, fontSize = 17.sp, fontWeight = FontWeight.Black) }
+    ) { Text(text, fontSize = 16.sp, fontWeight = FontWeight.Black) }
 }
 
 @Composable

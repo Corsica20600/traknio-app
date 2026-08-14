@@ -274,6 +274,34 @@ export function GuidedWorkoutClient({
     plannedReps: planned,
     existing: completedForExercise.find((set) => set.setIndex === idx + 1),
   }));
+  const activeSet = setRows[Math.max(0, Math.min(nextSetIndex - 1, setRows.length - 1))];
+  const activeKey = activeSet ? `${exercise.id}:${activeSet.setIndex}` : "";
+
+  useEffect(() => {
+    if (!activeSet || !activeKey) return;
+    let cancelled = false;
+    const refreshLiveTarget = async () => {
+      const params = new URLSearchParams({
+        sessionId,
+        exerciseId: exercise.id,
+        programExerciseId: exercise.programExerciseId ?? "",
+        setIndex: String(activeSet.setIndex),
+      });
+      const response = await fetch(`/api/workout/live-target?${params}`, { cache: "no-store" }).catch(() => null);
+      if (!response?.ok || cancelled) return;
+      const data = await response.json() as { target?: { targetReps?: number | null; targetWeightKg?: number | null } | null };
+      if (!data.target || cancelled) return;
+      if (Number.isFinite(data.target.targetReps)) {
+        setRepsByKey((previous) => previous[activeKey] === data.target!.targetReps ? previous : { ...previous, [activeKey]: data.target!.targetReps! });
+      }
+      if (Number.isFinite(data.target.targetWeightKg)) {
+        setWeightByKey((previous) => previous[activeKey] === data.target!.targetWeightKg ? previous : { ...previous, [activeKey]: data.target!.targetWeightKg! });
+      }
+    };
+    void refreshLiveTarget();
+    const interval = window.setInterval(() => void refreshLiveTarget(), 1000);
+    return () => { cancelled = true; window.clearInterval(interval); };
+  }, [activeKey, activeSet, exercise.id, exercise.programExerciseId, sessionId]);
 
   const getPlannedRestForIndex = useCallback((index: number) => {
     const nextRest = exercises[index]?.plannedRestSeconds;
@@ -970,8 +998,6 @@ export function GuidedWorkoutClient({
   const isLastExercise = exerciseIndex >= exercises.length - 1;
   const isExerciseDone = completedForExercise.length >= setRows.length && setRows.length > 0;
   const isWorkoutDone = isLastExercise && isExerciseDone;
-  const activeSet = setRows[Math.max(0, Math.min(nextSetIndex - 1, setRows.length - 1))];
-  const activeKey = activeSet ? `${exercise.id}:${activeSet.setIndex}` : "";
   const activeReps = activeSet ? Math.max(1, repsByKey[activeKey] ?? activeSet.plannedReps) : 10;
   const weightFromCompleted = activeSet?.existing?.actualWeightKg ?? null;
   const activeWeight = activeSet ? Math.max(0, weightByKey[activeKey] ?? weightFromCompleted ?? exercise.plannedWeightKg ?? 0) : 0;
