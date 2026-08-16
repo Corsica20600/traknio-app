@@ -79,6 +79,17 @@ class TraknioWatchApi(
 
     suspend fun completeSession(sessionId: String): WatchPayload = postAction("complete-session", "/api/watch/complete-session", sessionId)
 
+    suspend fun submitSessionMetrics(
+        sessionId: String,
+        averageHeartRateBpm: Int?,
+        sessionCaloriesKcal: Double?,
+    ): WatchPayload = postAction(
+        "submit-session-metrics",
+        "/api/watch/session-metrics",
+        sessionId,
+        mapOf("averageHeartRateBpm" to averageHeartRateBpm, "sessionCaloriesKcal" to sessionCaloriesKcal),
+    )
+
     suspend fun completePairing(pairingToken: String, label: String): PairingResult = withContext(Dispatchers.IO) {
         Log.i(TAG, "pair complete called labelPresent=${label.isNotBlank()}")
         val body = JSONObject()
@@ -134,6 +145,8 @@ class TraknioWatchApi(
             weight = extra["weight"] as? Double,
             deltaSeconds = extra["deltaSeconds"] as? Int,
             exerciseIndex = extra["exerciseIndex"] as? Int,
+            averageHeartRateBpm = extra["averageHeartRateBpm"] as? Int,
+            sessionCaloriesKcal = extra["sessionCaloriesKcal"] as? Double,
         )
         return executeWithFallback(request) { requestPayload(path, "POST", body, request.requestId) }
     }
@@ -241,6 +254,7 @@ class TraknioWatchApi(
             exercises = json.optInt("exercises", 0),
             sets = json.optInt("sets", 0),
             averageHeartRateBpm = if (json.isNull("averageHeartRateBpm")) null else json.optInt("averageHeartRateBpm"),
+            sessionCaloriesKcal = if (json.isNull("sessionCaloriesKcal")) null else json.optDouble("sessionCaloriesKcal"),
             xpGained = json.optInt("xpGained", 100),
             level = json.optInt("level", 1),
             levelReached = json.optBoolean("levelReached", false),

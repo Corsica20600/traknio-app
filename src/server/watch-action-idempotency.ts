@@ -12,7 +12,8 @@ export type WatchActionOperation =
   | "next-exercise"
   | "previous-exercise"
   | "select-exercise"
-  | "complete-session";
+  | "complete-session"
+  | "submit-session-metrics";
 
 type StoredResponse = {
   payload?: unknown;

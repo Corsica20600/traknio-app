@@ -45,6 +45,7 @@ type WatchSessionSummary = {
   exercises: number;
   sets: number;
   averageHeartRateBpm: number | null;
+  sessionCaloriesKcal: number | null;
   xpGained: number;
   level: number;
   levelReached: boolean;
@@ -111,6 +112,8 @@ async function getWatchSessionSummary(session: {
   id: string;
   userProfileId: string;
   durationSeconds: number | null;
+  averageHeartRateBpm: number | null;
+  sessionCaloriesKcal: number | null;
   status: string;
 }, db: WatchDatabase): Promise<WatchSessionSummary | undefined> {
   if (session.status !== "COMPLETED") return undefined;
@@ -134,8 +137,8 @@ async function getWatchSessionSummary(session: {
     volumeKg: stats.volumeKg,
     exercises: stats.exercises,
     sets: stats.sets,
-    // No session-scoped heart-rate average is persisted yet. Never reuse daily Health data here.
-    averageHeartRateBpm: null,
+    averageHeartRateBpm: session.averageHeartRateBpm,
+    sessionCaloriesKcal: session.sessionCaloriesKcal,
     xpGained: 100,
     level,
     levelReached: level > previousLevel,
@@ -704,4 +707,31 @@ export async function completeWatchSession(sessionId: string, userProfileId?: st
   });
   const final = await getWatchPayload(state.sessionId, userProfileId, db);
   return final ? { ...final, status: "COMPLETED", restRemaining: 0 } : null;
+}
+
+export async function submitWatchSessionMetrics(input: {
+  sessionId: string;
+  averageHeartRateBpm?: number | null;
+  sessionCaloriesKcal?: number | null;
+  userProfileId?: string;
+}, db: WatchDatabase = prisma) {
+  const session = await resolveSession(input.sessionId, input.userProfileId, db);
+  if (!session) return null;
+
+  const averageHeartRateBpm = input.averageHeartRateBpm != null && Number.isFinite(input.averageHeartRateBpm)
+    ? Math.max(1, Math.round(input.averageHeartRateBpm))
+    : null;
+  const sessionCaloriesKcal = input.sessionCaloriesKcal != null && Number.isFinite(input.sessionCaloriesKcal)
+    ? Math.max(0, input.sessionCaloriesKcal)
+    : null;
+
+  // A replay never erases a previously accepted measurement with an absent metric.
+  await db.workoutSession.update({
+    where: { id: session.id },
+    data: {
+      ...(averageHeartRateBpm != null ? { averageHeartRateBpm } : {}),
+      ...(sessionCaloriesKcal != null ? { sessionCaloriesKcal } : {}),
+    },
+  });
+  return getWatchPayload(session.id, input.userProfileId, db);
 }

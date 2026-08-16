@@ -93,6 +93,8 @@ data class WatchRelayRequest(
     val weight: Double? = null,
     val deltaSeconds: Int? = null,
     val exerciseIndex: Int? = null,
+    val averageHeartRateBpm: Int? = null,
+    val sessionCaloriesKcal: Double? = null,
 ) {
     fun toJson(): String = JSONObject()
         .put("requestId", requestId)
@@ -102,6 +104,8 @@ data class WatchRelayRequest(
         .put("weight", weight)
         .put("deltaSeconds", deltaSeconds)
         .put("exerciseIndex", exerciseIndex)
+        .put("averageHeartRateBpm", averageHeartRateBpm)
+        .put("sessionCaloriesKcal", sessionCaloriesKcal)
         .toString()
 }
 
@@ -163,6 +167,7 @@ object WatchPayloadJson {
                 exercises = summary.optInt("exercises", 0),
                 sets = summary.optInt("sets", 0),
                 averageHeartRateBpm = if (summary.isNull("averageHeartRateBpm")) null else summary.optInt("averageHeartRateBpm"),
+                sessionCaloriesKcal = if (summary.isNull("sessionCaloriesKcal")) null else summary.optDouble("sessionCaloriesKcal"),
                 xpGained = summary.optInt("xpGained", 100),
                 level = summary.optInt("level", 1),
                 levelReached = summary.optBoolean("levelReached", false),

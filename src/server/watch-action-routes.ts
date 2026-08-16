@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import {
   adjustWatchRest,
   completeWatchSession,
+  submitWatchSessionMetrics,
   nextWatchExercise,
   pauseWatchRest,
   previousWatchExercise,
@@ -17,7 +18,7 @@ import { runIdempotentWatchAction, type WatchActionOperation, type WatchActionRe
 type WatchAccess = { userProfileId?: string };
 
 function revalidateWatchPaths(operation: WatchActionOperation) {
-  if (["validate-set", "update-live-target", "skip-rest", "adjust-rest", "pause-rest", "resume-rest", "select-exercise", "complete-session"].includes(operation)) {
+  if (["validate-set", "update-live-target", "skip-rest", "adjust-rest", "pause-rest", "resume-rest", "select-exercise", "complete-session", "submit-session-metrics"].includes(operation)) {
     revalidatePath("/workout");
     revalidatePath("/dashboard");
     revalidatePath("/history");
@@ -43,6 +44,8 @@ export async function executeWatchActionRoute(input: {
     weight: body.weight == null ? null : Number(body.weight),
     deltaSeconds: body.deltaSeconds == null ? null : Number(body.deltaSeconds),
     exerciseIndex: body.exerciseIndex == null ? null : Number(body.exerciseIndex),
+    averageHeartRateBpm: body.averageHeartRateBpm == null ? null : Number(body.averageHeartRateBpm),
+    sessionCaloriesKcal: body.sessionCaloriesKcal == null ? null : Number(body.sessionCaloriesKcal),
   };
 
   const result = await runIdempotentWatchAction({
@@ -75,6 +78,12 @@ export async function executeWatchActionRoute(input: {
           case "previous-exercise": return previousWatchExercise(sessionId, userProfileId, tx);
           case "select-exercise": return selectWatchExercise(sessionId, canonicalPayload.exerciseIndex ?? 0, userProfileId, tx);
           case "complete-session": return completeWatchSession(sessionId, userProfileId, tx);
+          case "submit-session-metrics": return submitWatchSessionMetrics({
+            sessionId,
+            averageHeartRateBpm: canonicalPayload.averageHeartRateBpm,
+            sessionCaloriesKcal: canonicalPayload.sessionCaloriesKcal,
+            userProfileId,
+          }, tx);
         }
       })();
       return payload

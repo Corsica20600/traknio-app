@@ -130,12 +130,12 @@ Sortie attendue:
 - Une vraie distribution large peut necessiter le process partenaire Samsung.
 - Pour un usage prive perso, tu peux rester en installation manuelle.
 
-## 8) Passage du mock au vrai Samsung SDK
+## 8) Samsung Health SDK
 
 Dans le projet Android:
 
-- `SamsungHealthProviderMock` est le provider temporaire.
-- Remplacer par une implementation `SamsungHealthProvider` qui lit le SDK Samsung.
+- `SamsungHealthProvider` lit le SDK Samsung lorsqu'il est disponible.
+- Si le SDK ou Samsung Health est indisponible, aucune donnée synthétique n'est créée ni synchronisée.
 
 Fichiers concernes:
 
@@ -172,4 +172,4 @@ cd android-private/traknio-android
 
 Notes:
 - Appareil Samsung reel requis.
-- Si l'AAR n'est pas presente, l'app reste fonctionnelle et bascule en fallback mock.
+- Si l'AAR n'est pas présente, l'app reste fonctionnelle sans synchroniser de données Samsung Health synthétiques.

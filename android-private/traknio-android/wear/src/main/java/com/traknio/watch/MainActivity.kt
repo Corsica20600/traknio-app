@@ -4,9 +4,13 @@ import android.os.Bundle
 import android.app.Activity
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -83,6 +87,17 @@ private fun TraknioWearApp() {
         },
     )
     val state by viewModel.state.collectAsState()
+    val activity = LocalContext.current as? Activity
+    val permissionsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        viewModel.onExercisePermissionsUpdated()
+    }
+    val activeSessionId = (state as? WatchScreenState.Ready)?.payload?.takeIf { it.status == "IN_PROGRESS" }?.sessionId
+    LaunchedEffect(activeSessionId) {
+        if (activeSessionId == null || activity == null) return@LaunchedEffect
+        val permissions = ExercisePermissions.requiredRuntimePermissions()
+        val missing = permissions.filter { ContextCompat.checkSelfPermission(activity, it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
+        if (missing.isNotEmpty()) permissionsLauncher.launch(missing.toTypedArray())
+    }
     val keepScreenOn = (state as? WatchScreenState.Ready)
         ?.payload
         ?.status != "COMPLETED" && state is WatchScreenState.Ready
@@ -138,8 +153,8 @@ private fun WatchChrome(
                     ),
                 )
                 .padding(
-                    horizontal = if (isRound) 25.dp else 18.dp,
-                    vertical = if (compact) 10.dp else if (isRound) 30.dp else 24.dp,
+                    horizontal = if (isRound) WearDimensions.roundHorizontalSafe else WearDimensions.rectangularHorizontalSafe,
+                    vertical = if (compact) WearDimensions.compactVerticalSafe else if (isRound) WearDimensions.roundVerticalSafe else 24.dp,
                 ),
             contentAlignment = Alignment.Center,
         ) {
@@ -235,7 +250,7 @@ private fun WorkoutListScreen(payload: WatchPayload, enabled: Boolean, onExercis
         val listState = rememberScalingLazyListState(initialCenterItemIndex = activeItemIndex)
         Box(modifier = Modifier.fillMaxSize()) {
             ScalingLazyColumn(
-                modifier = Modifier.fillMaxSize().padding(top = 18.dp),
+                modifier = Modifier.fillMaxSize().padding(top = 20.dp),
                 state = listState,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -243,11 +258,14 @@ private fun WorkoutListScreen(payload: WatchPayload, enabled: Boolean, onExercis
             val complete = exercise.completedSets >= exercise.totalSets
             val active = exercise.index == payload.exerciseIndex - 1
             Chip(
-                modifier = Modifier.fillMaxWidth(0.88f).height(if (active) 46.dp else 38.dp).padding(vertical = 1.dp),
+                modifier = Modifier
+                    .fillMaxWidth(WearDimensions.workoutListWidthFraction)
+                    .height(if (active) WearDimensions.activeListCardHeight else WearDimensions.listCardHeight)
+                    .padding(vertical = 2.dp),
                 label = {
-                    Column {
-                        Text(compactWearExerciseName(exercise.name), maxLines = 1, overflow = TextOverflow.Ellipsis, style = WearTypography.title.copy(fontSize = if (active) 11.sp else 9.sp, fontWeight = if (active) FontWeight.Black else FontWeight.Bold))
-                        Text(if (complete) "✓ ${exercise.completedSets}/${exercise.totalSets}" else if (active) "● ${exercise.completedSets}/${exercise.totalSets} · ${exercise.weight?.let { "${trimWeight(it)} kg" } ?: "charge libre"}" else "○ ${exercise.completedSets}/${exercise.totalSets}", color = if (active) Color(0xFFBFE6FF) else Color(0xFF8E9BB3), fontSize = 7.sp)
+                    Column(modifier = Modifier.padding(vertical = 2.dp)) {
+                        Text(compactWearExerciseName(exercise.name), maxLines = 1, overflow = TextOverflow.Ellipsis, style = WearTypography.title.copy(fontSize = if (active) 13.sp else 11.sp, fontWeight = if (active) FontWeight.Black else FontWeight.Bold))
+                        Text(if (complete) "✓ ${exercise.completedSets}/${exercise.totalSets}" else if (active) "● ${exercise.completedSets}/${exercise.totalSets} · ${exercise.weight?.let { "${trimWeight(it)} kg" } ?: "charge libre"}" else "○ ${exercise.completedSets}/${exercise.totalSets}", color = if (active) Color(0xFFBFE6FF) else Color(0xFF8E9BB3), fontSize = 9.sp)
                     }
                 },
                 colors = ChipDefaults.chipColors(backgroundColor = if (active) Color(0xFF163967) else Color(0xFF0C1629), contentColor = Color.White),
@@ -266,14 +284,16 @@ private fun WorkoutListScreen(payload: WatchPayload, enabled: Boolean, onExercis
 private fun ExerciseDetailScreen(payload: WatchPayload, selectedIndex: Int?, enabled: Boolean, onBack: () -> Unit, onOpenActiveSet: () -> Unit) {
     val exercise = payload.exercises.firstOrNull { it.index == selectedIndex }
         ?: payload.exercises.getOrNull(payload.exerciseIndex - 1)
+    val title = compactWearExerciseName(exercise?.name ?: payload.exerciseName)
+    val hasLongTitle = title.length > 30
     Box(modifier = Modifier.fillMaxSize()) {
-    ScalingLazyColumn(modifier = Modifier.fillMaxSize().padding(top = 47.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    ScalingLazyColumn(modifier = Modifier.fillMaxSize().padding(top = if (hasLongTitle) 48.dp else 52.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         items((1..(exercise?.totalSets ?: payload.totalSets)).toList()) { set ->
             val done = set <= (exercise?.completedSets ?: 0)
             val active = set == (exercise?.activeSetIndex ?: payload.setIndex)
             Chip(
-                modifier = Modifier.fillMaxWidth(0.84f).height(36.dp).padding(vertical = 1.dp),
-                label = { Text("S$set   ${exercise?.targetReps ?: payload.targetReps} × ${exercise?.weight?.let { "${trimWeight(it)} kg" } ?: "—"}   ${if (done) "✓" else if (active) "●" else "○"}", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, fontSize = 10.sp, fontWeight = if (active) FontWeight.Black else FontWeight.Medium) },
+                modifier = Modifier.fillMaxWidth(WearDimensions.contentWidthFraction).height(WearDimensions.setRowHeight).padding(vertical = 2.dp),
+                label = { Text("S$set   ${exercise?.targetReps ?: payload.targetReps} × ${exercise?.weight?.let { "${trimWeight(it)} kg" } ?: "—"}   ${if (done) "✓" else if (active) "●" else "○"}", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, fontSize = 12.sp, fontWeight = if (active) FontWeight.Black else FontWeight.Medium) },
                 colors = ChipDefaults.chipColors(backgroundColor = if (active) Color(0xFF163967) else Color(0xFF0C1629), contentColor = Color.White),
                 enabled = enabled && active,
                 onClick = onOpenActiveSet,
@@ -281,8 +301,8 @@ private fun ExerciseDetailScreen(payload: WatchPayload, selectedIndex: Int?, ena
         }
     }
         Column(modifier = Modifier.align(Alignment.TopCenter), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("‹  Séance", modifier = Modifier.height(22.dp).clickable(enabled = enabled, onClick = onBack), color = Color(0xFF9CCBFF), style = WearTypography.accent.copy(fontSize = 9.sp))
-            Text(compactWearExerciseName(exercise?.name ?: payload.exerciseName), textAlign = TextAlign.Center, style = WearTypography.title.copy(fontSize = 13.sp), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("‹  Séance", modifier = Modifier.height(if (hasLongTitle) 25.dp else 28.dp).clickable(enabled = enabled, onClick = onBack), color = Color(0xFF9CCBFF), style = WearTypography.accent.copy(fontSize = 10.sp))
+            Text(title, textAlign = TextAlign.Center, style = WearTypography.title.copy(fontSize = if (hasLongTitle) 13.sp else 14.sp, lineHeight = if (hasLongTitle) 14.sp else 16.sp), maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -386,6 +406,7 @@ private fun ActiveSetContent(
         // vertical inset here reduced the real XL-round content area below 180 dp.
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween,
     ) {
         // Zone haute : son contenu garde sa taille naturelle et ne recouvre jamais les actions.
         Column(
@@ -418,26 +439,30 @@ private fun ActiveSetContent(
             )
         }
 
-        // Zone centrale : elle absorbe uniquement l'espace restant entre le contexte et l'action.
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
+        Spacer(Modifier.height(5.dp))
+        // Two peer-sized touch targets keep values visible and reachable even for a two-line title.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = "$reps",
-                modifier = Modifier.clickable(enabled = enabled, onClick = onEditReps),
-                style = WearTypography.display,
-            )
-            Text("RÉPÉTITIONS", color = Color(0xFF9EAFCC), style = WearTypography.label)
-            WearValueButton(
-                text = if (isBodyweight && weight <= 0) "Poids du corps  ›" else "${trimWeight(weight)} kg  ›",
+            SetValueTarget(
+                label = "KG",
+                value = if (isBodyweight && weight <= 0) "CORPS" else trimWeight(weight),
                 enabled = enabled,
                 onClick = onEditWeight,
-                modifier = Modifier.padding(top = 1.dp).height(36.dp),
+                modifier = Modifier.width(72.dp),
+            )
+            SetValueTarget(
+                label = "RÉPÉTITIONS",
+                value = reps.toString(),
+                enabled = enabled,
+                onClick = onEditReps,
+                modifier = Modifier.width(72.dp),
             )
         }
 
-        Spacer(Modifier.height(8.dp))
-        // Zone basse fixe : minimum 48 dp, distincte du bloc de charge.
+        // Zone basse stable : it cannot be displaced by a long exercise title.
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -445,6 +470,33 @@ private fun ActiveSetContent(
                 Text(error, color = Color(0xFFFFB86B), fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             BigActionButton("VALIDER", enabled = enabled, onClick = onValidate)
+        }
+    }
+}
+
+@Composable
+private fun SetValueTarget(
+    label: String,
+    value: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, color = Color(0xFF9EAFCC), style = WearTypography.label.copy(fontSize = 8.sp), maxLines = 1)
+        Button(
+            modifier = Modifier.fillMaxWidth().height(66.dp),
+            enabled = enabled,
+            colors = ButtonDefaults.buttonColors(
+                backgroundColor = Color(0xFF183866),
+                contentColor = Color.White,
+                disabledBackgroundColor = Color(0xFF1B2437),
+            ),
+            onClick = onClick,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(value, style = WearTypography.display.copy(fontSize = if (value.length > 3) 18.sp else 25.sp, lineHeight = 27.sp), maxLines = 1)
+            }
         }
     }
 }
@@ -463,16 +515,31 @@ private fun ValueEditorScreen(
     onDone: () -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
+    val displayedValue = trimWeight(value)
+    val valueFontSize = if (displayedValue.length > 3) 46.sp else 54.sp
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Text(label, color = Color(0xFF9CCBFF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        Text(trimWeight(value), fontSize = 54.sp, fontWeight = FontWeight.Black, lineHeight = 54.sp)
+        Box(
+            modifier = Modifier
+                .width(if (displayedValue.length > 3) 118.dp else 84.dp)
+                .height(58.dp)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(Color(0x332D1F66), Color(0x142D1F66), Color.Transparent),
+                    ),
+                    CircleShape,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(displayedValue, fontSize = valueFontSize, fontWeight = FontWeight.Black, lineHeight = 54.sp, maxLines = 1)
+        }
         Text(unit, color = Color(0xFFB7C9EA), fontSize = 12.sp, fontWeight = FontWeight.Bold)
         Row(
-            modifier = Modifier.padding(top = 9.dp),
+            modifier = Modifier.padding(top = 5.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             EditorStepButton("−${trimWeight(decrement)}", onClick = {
@@ -484,7 +551,7 @@ private fun ValueEditorScreen(
                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             })
         }
-        BigActionButton("OK", enabled = true, onClick = onDone, modifier = Modifier.padding(top = 9.dp))
+        BigActionButton("OK", enabled = true, onClick = onDone, modifier = Modifier.padding(top = 5.dp))
     }
 }
 
@@ -658,6 +725,18 @@ private fun ExerciseDetailUltraPreview() {
     MaterialTheme { WatchChrome { ExerciseDetailScreen(previewWorkoutPayload(), 1, true, {}, {}) } }
 }
 
+@Preview(name = "Détail exercice long · Galaxy Watch Ultra", widthDp = 227, heightDp = 227, showBackground = true)
+@Composable
+private fun ExerciseDetailLongTitleUltraPreview() {
+    val payload = previewWorkoutPayload().copy(
+        exerciseName = "Développé couché avec barre Prise moyenne",
+        exercises = listOf(
+            WatchExerciseSummary(0, "Développé couché avec barre Prise moyenne", 5, 1, 2, 10, 80.0),
+        ),
+    )
+    MaterialTheme { WatchChrome { ExerciseDetailScreen(payload, 0, true, {}, {}) } }
+}
+
 private fun previewWorkoutPayload() = WatchPayload(
     sessionId = "preview", workoutTitle = "Push", exerciseName = "Hack Squat", exerciseIndex = 2, totalExercises = 8,
     setIndex = 3, totalSets = 3, targetReps = 12, weight = 100.0, activeWeight = 100.0, proposedWeight = null,
@@ -742,7 +821,6 @@ private fun ActiveSetRowingPreview() {
 private fun RestScreenRoundPreview() = RestScreenInitialPreview()
 
 @Preview(name = "Charge · Galaxy Watch Ultra", widthDp = 227, heightDp = 227, showBackground = true)
-@Preview(name = "Répétitions · grande ronde", device = "id:wearos_large_round", widthDp = 227, heightDp = 227, showBackground = true)
 @Composable
 private fun ValueEditorRoundPreview() {
     MaterialTheme {
@@ -761,14 +839,32 @@ private fun ValueEditorRoundPreview() {
     }
 }
 
+@Preview(name = "Répétitions · Galaxy Watch Ultra", widthDp = 227, heightDp = 227, showBackground = true)
+@Composable
+private fun RepetitionsEditorRoundPreview() {
+    MaterialTheme {
+        WatchChrome {
+            ValueEditorScreen(
+                label = "RÉPÉTITIONS",
+                value = 12.0,
+                unit = "reps",
+                decrement = 1.0,
+                increment = 1.0,
+                minimum = 1.0,
+                onValueChange = {},
+                onDone = {},
+            )
+        }
+    }
+}
+
 @Composable
 private fun CompletedScreen(state: WatchScreenState.Ready, onRefresh: () -> Unit) {
     val activity = LocalContext.current as? Activity
     val summary = state.payload.summary
     ScalingLazyColumn(
         modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF02040A)),
+            .fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Top,
         autoCentering = null,
@@ -784,7 +880,7 @@ private fun CompletedScreen(state: WatchScreenState.Ready, onRefresh: () -> Unit
         }
         item {
             Text(
-                text = "SÉANCE",
+                text = "SÉANCE TERMINÉE",
                 color = Color(0xFFB7C9EA),
                 fontSize = 8.sp,
                 fontWeight = FontWeight.Black,
@@ -858,10 +954,12 @@ private fun CompletedScreen(state: WatchScreenState.Ready, onRefresh: () -> Unit
 private fun SummaryGrid(summary: WatchSessionSummary) {
     Column(
         modifier = Modifier
-            .fillMaxWidth(0.84f)
-            .padding(top = 4.dp),
+            .fillMaxWidth(WearDimensions.contentWidthFraction)
+            .padding(top = 7.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         Row(
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -870,29 +968,18 @@ private fun SummaryGrid(summary: WatchSessionSummary) {
                 iconColor = Color(0xFF00E0FF),
                 value = "${summary.exercises}",
                 label = "EXERCICES",
-                modifier = Modifier.width(80.dp),
-            )
-            Box(
-                modifier = Modifier
-                    .width(1.dp)
-                    .height(42.dp)
-                    .background(Color(0xFF26334D)),
+                modifier = Modifier.width(72.dp),
             )
             SummaryCell(
                 icon = R.drawable.ic_summary_volume,
                 iconColor = Color(0xFF00C7FF),
-                value = formatFrenchNumber(summary.volumeKg),
-                label = "KG TOTAL",
-                modifier = Modifier.width(80.dp),
+                value = "${formatFrenchNumber(summary.volumeKg)} kg",
+                label = "VOLUME",
+                modifier = Modifier.width(72.dp),
             )
         }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(Color(0xFF26334D)),
-        )
         Row(
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -902,13 +989,7 @@ private fun SummaryGrid(summary: WatchSessionSummary) {
                 iconColor = Color(0xFFFF4D88),
                 value = summary.averageHeartRateBpm?.toString() ?: "—",
                 label = "FC MOY.",
-                modifier = Modifier.width(80.dp),
-            )
-            Box(
-                modifier = Modifier
-                    .width(1.dp)
-                    .height(42.dp)
-                    .background(Color(0xFF26334D)),
+                modifier = Modifier.width(72.dp),
             )
             SummaryCell(
                 icon = null,
@@ -916,7 +997,17 @@ private fun SummaryGrid(summary: WatchSessionSummary) {
                 iconColor = Color(0xFF00E0FF),
                 value = formatDuration(summary.durationSeconds),
                 label = "DURÉE",
-                modifier = Modifier.width(80.dp),
+                modifier = Modifier.width(72.dp),
+            )
+        }
+        summary.sessionCaloriesKcal?.let { calories ->
+            SummaryCell(
+                icon = null,
+                iconText = "⚡",
+                iconColor = Color(0xFFC9B5FF),
+                value = "${kotlin.math.round(calories).toInt()} kcal",
+                label = "CALORIES SÉANCE",
+                modifier = Modifier.align(Alignment.CenterHorizontally).width(92.dp),
             )
         }
     }
@@ -932,7 +1023,7 @@ private fun SummaryCell(
     iconText: String? = null,
 ) {
     Column(
-        modifier = modifier.padding(vertical = 4.dp),
+        modifier = modifier.padding(vertical = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         if (icon != null) {
@@ -945,7 +1036,7 @@ private fun SummaryCell(
         } else {
             Text(iconText.orEmpty(), color = iconColor, fontSize = 12.sp, fontWeight = FontWeight.Black)
         }
-        Text(value, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black, maxLines = 1)
+        Text(value, color = Color.White, fontSize = if (value.length > 6) 12.sp else 14.sp, fontWeight = FontWeight.Black, maxLines = 1)
         Text(label, color = Color(0xFF8E9BB3), fontSize = 7.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
@@ -953,7 +1044,7 @@ private fun SummaryCell(
 @Composable
 private fun FinalActionChip(onClick: () -> Unit, enabled: Boolean) {
     Chip(
-        modifier = Modifier.width(128.dp),
+        modifier = Modifier.width(142.dp).height(WearDimensions.minimumActionHeight),
         label = {
             Text(
                 text = "Terminer",

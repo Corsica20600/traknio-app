@@ -38,6 +38,7 @@ data class WatchSessionSummary(
     val exercises: Int,
     val sets: Int,
     val averageHeartRateBpm: Int?,
+    val sessionCaloriesKcal: Double?,
     val xpGained: Int,
     val level: Int,
     val levelReached: Boolean,

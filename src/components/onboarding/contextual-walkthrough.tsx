@@ -20,9 +20,8 @@ export function ContextualWalkthrough({
   message: string;
 }) {
   const [position, setPosition] = useState<Position | null>(null);
-  const [visible, setVisible] = useState(active);
-
-  useEffect(() => setVisible(active), [active]);
+  const [dismissedStep, setDismissedStep] = useState<OnboardingStep | null>(null);
+  const visible = active && dismissedStep !== step;
 
   useEffect(() => {
     if (!visible) return;
@@ -67,7 +66,7 @@ export function ContextualWalkthrough({
   if (!visible || !position) return null;
 
   async function dismiss() {
-    setVisible(false);
+    setDismissedStep(step);
     await markOnboardingStepAction(step);
   }
 

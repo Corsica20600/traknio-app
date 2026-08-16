@@ -15,30 +15,26 @@ interface SamsungHealthProvider {
 class SamsungHealthProviderFactory(private val context: Context) {
     fun create(): SamsungHealthProvider {
         val sdkProvider = SamsungHealthProviderSdk(context)
-        return if (sdkProvider.isSdkAvailable()) sdkProvider else SamsungHealthProviderMock()
+        return if (sdkProvider.isSdkAvailable()) sdkProvider else SamsungHealthProviderUnavailable()
     }
 }
 
-class SamsungHealthProviderMock : SamsungHealthProvider {
+/** Samsung Health is optional; unavailable SDKs must never yield synthetic health data. */
+class SamsungHealthProviderUnavailable : SamsungHealthProvider {
     override suspend fun ensurePermissions(activity: Activity): HealthPermissionState {
         return HealthPermissionState(
             sdkAvailable = false,
-            permissionsGranted = true,
-            usingMockFallback = true,
-            message = "SDK Samsung Health indisponible, fallback mock actif.",
+            permissionsGranted = false,
+            usingMockFallback = false,
+            message = "SDK Samsung Health indisponible.",
         )
     }
 
     override suspend fun readLatestMetrics(): HealthReadResult {
-        val now = Instant.now().toString()
         return HealthReadResult(
-            records = listOf(
-                SamsungMetricRecord(metric = "steps", value = 7500.0, measuredAt = now, sourceDevice = "Galaxy Watch"),
-                SamsungMetricRecord(metric = "heart_rate", value = 62.0, measuredAt = now, sourceDevice = "Galaxy Watch"),
-                SamsungMetricRecord(metric = "sleep_minutes", value = 420.0, measuredAt = now, sourceDevice = "Galaxy Watch"),
-            ),
-            usingMockFallback = true,
-            message = "Donnees mock utilisees (SDK Samsung non actif).",
+            records = emptyList(),
+            usingMockFallback = false,
+            message = "SDK Samsung Health indisponible.",
         )
     }
 }
@@ -62,7 +58,7 @@ private class SamsungHealthProviderSdk(private val context: Context) : SamsungHe
             return HealthPermissionState(
                 sdkAvailable = false,
                 permissionsGranted = false,
-                usingMockFallback = true,
+                usingMockFallback = false,
                 message = "AAR Samsung Health Data SDK absente ou incompatible.",
             )
         }
@@ -72,7 +68,7 @@ private class SamsungHealthProviderSdk(private val context: Context) : SamsungHe
                 return HealthPermissionState(
                     sdkAvailable = true,
                     permissionsGranted = false,
-                    usingMockFallback = true,
+                    usingMockFallback = false,
                     message = "Samsung Health n'est pas installe.",
                 )
             }
@@ -116,13 +112,13 @@ private class SamsungHealthProviderSdk(private val context: Context) : SamsungHe
 
     override suspend fun readLatestMetrics(): HealthReadResult {
         if (!isSdkAvailable()) {
-            return SamsungHealthProviderMock().readLatestMetrics()
+            return SamsungHealthProviderUnavailable().readLatestMetrics()
         }
         if (!isSamsungHealthInstalled()) {
             return HealthReadResult(
-                records = SamsungHealthProviderMock().readLatestMetrics().records,
-                usingMockFallback = true,
-                message = "Samsung Health indisponible: fallback mock utilise.",
+                records = emptyList(),
+                usingMockFallback = false,
+                message = "Samsung Health n'est pas installe.",
             )
         }
 

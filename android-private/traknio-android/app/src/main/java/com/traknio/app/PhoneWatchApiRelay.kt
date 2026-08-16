@@ -29,6 +29,8 @@ data class PhoneWatchRelayRequest(
     val weight: Double?,
     val deltaSeconds: Int?,
     val exerciseIndex: Int?,
+    val averageHeartRateBpm: Int?,
+    val sessionCaloriesKcal: Double?,
     val sourceNodeId: String,
     val createdAtMs: Long,
 ) {
@@ -40,6 +42,8 @@ data class PhoneWatchRelayRequest(
         .put("weight", weight)
         .put("deltaSeconds", deltaSeconds)
         .put("exerciseIndex", exerciseIndex)
+        .put("averageHeartRateBpm", averageHeartRateBpm)
+        .put("sessionCaloriesKcal", sessionCaloriesKcal)
         .put("sourceNodeId", sourceNodeId)
         .put("createdAtMs", createdAtMs)
         .toString()
@@ -55,6 +59,8 @@ data class PhoneWatchRelayRequest(
                 weight = if (json.isNull("weight")) null else json.optDouble("weight"),
                 deltaSeconds = if (json.isNull("deltaSeconds")) null else json.optInt("deltaSeconds"),
                 exerciseIndex = if (json.isNull("exerciseIndex")) null else json.optInt("exerciseIndex"),
+                averageHeartRateBpm = if (json.isNull("averageHeartRateBpm")) null else json.optInt("averageHeartRateBpm"),
+                sessionCaloriesKcal = if (json.isNull("sessionCaloriesKcal")) null else json.optDouble("sessionCaloriesKcal"),
                 sourceNodeId = json.optString("sourceNodeId"),
                 createdAtMs = json.optLong("createdAtMs", System.currentTimeMillis()),
             )
@@ -176,6 +182,7 @@ class PhoneWatchRelayClient(private val context: Context) {
             "previous-exercise" -> "/api/watch/previous-exercise"
             "select-exercise" -> "/api/watch/select-exercise"
             "complete-session" -> "/api/watch/complete-session"
+            "submit-session-metrics" -> "/api/watch/session-metrics"
             else -> return RelayExecution.FinalFailure(400, "Action montre inconnue")
         }
         return try {
@@ -199,6 +206,8 @@ class PhoneWatchRelayClient(private val context: Context) {
                         .put("weight", request.weight)
                         .put("deltaSeconds", request.deltaSeconds)
                         .put("exerciseIndex", request.exerciseIndex)
+                        .put("averageHeartRateBpm", request.averageHeartRateBpm)
+                        .put("sessionCaloriesKcal", request.sessionCaloriesKcal)
                         .toString())
                 }
             }

@@ -19,6 +19,7 @@ class WatchViewModel(context: Context) : ViewModel() {
     private val tokenStore = WatchTokenStore(appContext)
     private val pairingClient = WearPairingClient(appContext)
     private val phoneRelayClient = WatchPhoneRelayClient(appContext)
+    private val exerciseHealth = ExerciseHealthRepository(appContext)
     private val watchLabel = Build.MODEL?.takeIf { it.isNotBlank() } ?: "Montre Wear OS"
     private val api: TraknioWatchApi = TraknioWatchApi(
         deviceTokenProvider = { tokenStore.deviceToken() },
@@ -36,6 +37,7 @@ class WatchViewModel(context: Context) : ViewModel() {
     private var pollingJob: Job? = null
     private var pairingInProgress = false
     private var lastAccountCheckElapsedMs = 0L
+    private val metricsFinalizationInFlight = mutableSetOf<String>()
 
     init {
         startPolling()
@@ -49,6 +51,19 @@ class WatchViewModel(context: Context) : ViewModel() {
 
     fun refresh() {
         viewModelScope.launch { fetchState(silent = false) }
+    }
+
+    fun onExercisePermissionsUpdated() {
+        val payload = latestPayload?.takeIf { it.status == "IN_PROGRESS" } ?: return
+        if (ExerciseTrackingService.startIfPermitted(appContext, payload.sessionId)) {
+            (_state.value as? WatchScreenState.Ready)?.let { ready ->
+                _state.value = ready.copy(error = null)
+            }
+        } else {
+            (_state.value as? WatchScreenState.Ready)?.let { ready ->
+                _state.value = ready.copy(error = "Autorise les capteurs pour activer la fréquence cardiaque")
+            }
+        }
     }
 
     fun validateSet(actualReps: Int, weight: Double?) = perform("validate") { payload ->
@@ -311,6 +326,16 @@ class WatchViewModel(context: Context) : ViewModel() {
             restMutationPending = false
         }
         latestPayload = payload
+        if (payload.status == "IN_PROGRESS") {
+            val health = exerciseHealth.snapshot.value
+            if (health.sessionId != payload.sessionId || health.state != "ACTIVE") {
+                // Safe during automatic session restoration: this call is a no-op
+                // until the UI has obtained the Health Services permissions.
+                ExerciseTrackingService.startIfPermitted(appContext, payload.sessionId)
+            }
+        } else if (payload.status == "COMPLETED") {
+            finalizeExerciseMetrics(payload.sessionId)
+        }
         val nextKey = "${payload.sessionId}:${payload.exerciseIndex}:${payload.setIndex}"
         val contextChanged = latestKey != nextKey
         latestKey = nextKey
@@ -330,6 +355,27 @@ class WatchViewModel(context: Context) : ViewModel() {
             syncLabel = syncLabel,
             pausedRestRemaining = if (isPaused) payload.restRemaining else null,
         )
+    }
+
+    private fun finalizeExerciseMetrics(sessionId: String) {
+        if (!metricsFinalizationInFlight.add(sessionId)) return
+        viewModelScope.launch {
+            try {
+                val metrics = exerciseHealth.finish(sessionId)
+                ExerciseTrackingService.stop(appContext)
+                val average = metrics.averageHeartRateBpm
+                val calories = metrics.sessionCaloriesKcal
+                if (average != null || calories != null) {
+                    ensurePaired()
+                    applyPayload(api.submitSessionMetrics(sessionId, average, calories), syncLabel = "Synchronisé")
+                }
+                exerciseHealth.clear(sessionId)
+            } catch (error: Throwable) {
+                Log.w(TAG, "session metric finalization failed session=${sessionId.takeLast(8)} type=${error.javaClass.simpleName}")
+            } finally {
+                metricsFinalizationInFlight.remove(sessionId)
+            }
+        }
     }
 
     private fun updateDisplayRemaining() {
