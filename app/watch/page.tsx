@@ -132,12 +132,15 @@ export default function WatchPage() {
 
   useEffect(() => {
     const bootId = window.setTimeout(() => void refreshState(), 0);
-    const id = window.setInterval(() => void refreshState(true), 2000);
+    const intervalMs = state?.status === "IN_PROGRESS" ? 15_000 : 60_000;
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refreshState(true);
+    }, intervalMs);
     return () => {
       window.clearTimeout(bootId);
       window.clearInterval(id);
     };
-  }, [refreshState]);
+  }, [refreshState, state?.status]);
 
   useEffect(() => {
     const refreshDisplay = () => {

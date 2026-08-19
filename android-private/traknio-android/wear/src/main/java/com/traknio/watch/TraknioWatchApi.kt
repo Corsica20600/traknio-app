@@ -19,11 +19,19 @@ class TraknioWatchApi(
     private val deviceTokenProvider: () -> String? = { null },
     private val phoneRelayClient: WatchPhoneRelayClient? = null,
 ) {
-    suspend fun currentSession(sessionId: String? = null): WatchPayload = executeWithFallback(
+    suspend fun currentSession(sessionId: String? = null, bootstrap: Boolean = false): WatchPayload = executeWithFallback(
         WatchRelayRequest(UUID.randomUUID().toString(), "current-session", sessionId),
     ) {
         requestPayload(
-            path = if (sessionId.isNullOrBlank()) "/api/watch/current-session" else "/api/watch/current-session?sessionId=${sessionId.urlEncode()}",
+            path = buildString {
+                append("/api/watch/current-session")
+                if (!sessionId.isNullOrBlank() || bootstrap) {
+                    append("?")
+                    if (!sessionId.isNullOrBlank()) append("sessionId=${sessionId.urlEncode()}")
+                    if (!sessionId.isNullOrBlank() && bootstrap) append("&")
+                    if (bootstrap) append("bootstrap=1")
+                }
+            },
             method = "GET",
             body = null,
             requestId = null,

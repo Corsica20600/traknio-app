@@ -298,8 +298,12 @@ export function GuidedWorkoutClient({
         setWeightByKey((previous) => previous[activeKey] === data.target!.targetWeightKg ? previous : { ...previous, [activeKey]: data.target!.targetWeightKg! });
       }
     };
+    // The phone POSTs its own edits. This is only a low-frequency fallback for
+    // edits initiated on the watch; never poll Neon once per second.
     void refreshLiveTarget();
-    const interval = window.setInterval(() => void refreshLiveTarget(), 1000);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refreshLiveTarget();
+    }, 15_000);
     return () => { cancelled = true; window.clearInterval(interval); };
   }, [activeKey, activeSet, exercise.id, exercise.programExerciseId, sessionId]);
 
@@ -529,7 +533,11 @@ export function GuidedWorkoutClient({
       }
     }
 
-    const interval = window.setInterval(pullWatchState, 1000);
+    // Data Layer/action responses carry changes immediately. Polling is only a
+    // recovery fallback and is paused for a backgrounded browser tab.
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void pullWatchState();
+    }, 15_000);
     const pullFreshState = () => {
       void pullWatchState();
       router.refresh();

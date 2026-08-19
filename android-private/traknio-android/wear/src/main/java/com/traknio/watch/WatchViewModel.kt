@@ -128,6 +128,7 @@ class WatchViewModel(context: Context) : ViewModel() {
         pollingJob = viewModelScope.launch {
             fetchState(silent = false)
             while (true) {
+                if ((latestPayload?.status) == "COMPLETED") break
                 delay(nextPollingDelayMs())
                 fetchState(silent = true)
             }
@@ -135,8 +136,8 @@ class WatchViewModel(context: Context) : ViewModel() {
     }
 
     private fun nextPollingDelayMs(): Long {
-        val ready = _state.value as? WatchScreenState.Ready ?: return 8_000
-        return if (ready.payload.status == "IN_PROGRESS") 1_000 else 8_000
+        val ready = _state.value as? WatchScreenState.Ready ?: return 60_000
+        return if (ready.payload.status == "IN_PROGRESS") 15_000 else 60_000
     }
 
     private fun startDisplayTicker() {
@@ -160,14 +161,14 @@ class WatchViewModel(context: Context) : ViewModel() {
 
         try {
             ensurePaired()
-            applyPayload(api.currentSession(latestPayload?.sessionId), syncLabel = "Sync OK")
+            applyPayload(api.currentSession(latestPayload?.sessionId, bootstrap = latestPayload == null), syncLabel = "Sync OK")
             consumeStoredRelayResults()
         } catch (error: Throwable) {
             if (isPairingRequired(error)) {
                 tokenStore.clear()
                 val recovered = runCatching {
                     ensurePaired()
-                    applyPayload(api.currentSession(latestPayload?.sessionId), syncLabel = "Sync OK")
+                    applyPayload(api.currentSession(latestPayload?.sessionId, bootstrap = latestPayload == null), syncLabel = "Sync OK")
                     consumeStoredRelayResults()
                 }.isSuccess
                 if (recovered) return
@@ -312,14 +313,17 @@ class WatchViewModel(context: Context) : ViewModel() {
         val currentPayload = latestPayload
         val restSnapshotIsCurrent = confirmedRestMutation || currentPayload == null || currentPayload.sessionId != incoming.sessionId ||
             (!restMutationPending && isRestSnapshotAtLeastAsRecent(newestRestUpdatedAt ?: currentPayload.restUpdatedAt, incoming.restUpdatedAt))
+        val payloadWithLocalExercises = if (incoming.exercises.isEmpty() && currentPayload?.sessionId == incoming.sessionId) {
+            incoming.copy(exercises = currentPayload.exercises)
+        } else incoming
         val payload = if (currentPayload != null && currentPayload.sessionId == incoming.sessionId && !restSnapshotIsCurrent) {
-            incoming.copy(
+            payloadWithLocalExercises.copy(
                 restRemaining = currentPayload.restRemaining,
                 restStatus = currentPayload.restStatus,
                 restUpdatedAt = currentPayload.restUpdatedAt,
             )
         } else {
-            incoming
+            payloadWithLocalExercises
         }
         if (restSnapshotIsCurrent && !payload.restUpdatedAt.isNullOrBlank()) {
             newestRestUpdatedAt = payload.restUpdatedAt
@@ -334,6 +338,7 @@ class WatchViewModel(context: Context) : ViewModel() {
                 ExerciseTrackingService.startIfPermitted(appContext, payload.sessionId)
             }
         } else if (payload.status == "COMPLETED") {
+            pollingJob?.cancel()
             finalizeExerciseMetrics(payload.sessionId)
         }
         val nextKey = "${payload.sessionId}:${payload.exerciseIndex}:${payload.setIndex}"
