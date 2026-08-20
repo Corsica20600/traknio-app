@@ -25,6 +25,7 @@ import org.json.JSONObject
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.traknio.app.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
@@ -331,10 +332,14 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    @Suppress("DEPRECATION")
     private fun registerWorkoutStateReceiver() {
         if (workoutStateReceiverRegistered) return
-        registerReceiver(workoutStateReceiver, IntentFilter(WorkoutStateDataLayer.ACTION_STATE_RECEIVED))
+        ContextCompat.registerReceiver(
+            this,
+            workoutStateReceiver,
+            IntentFilter(WorkoutStateDataLayer.ACTION_STATE_RECEIVED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         workoutStateReceiverRegistered = true
     }
 
