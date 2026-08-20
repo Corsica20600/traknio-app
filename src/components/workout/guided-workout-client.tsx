@@ -303,6 +303,48 @@ export function GuidedWorkoutClient({
     const nextExerciseIndex = Math.max(0, Math.min(exercises.length - 1, Number(state.exerciseIndex) || 0));
     const nextSetIndex = Math.max(1, Number(state.setIndex) || 1);
     const nextExercise = exercises[nextExerciseIndex];
+
+    // A Watch validation payload points to the next active set. Reflect the
+    // completed sets locally before deriving activeSet below; otherwise the
+    // phone keeps rendering the previous set while its target values are
+    // written under the new set key.
+    if (state.action === "validate-set") {
+      const previousExerciseIndex = Math.max(0, Math.min(exercises.length - 1, exerciseIndex));
+      const completedExerciseIndex = nextExerciseIndex === previousExerciseIndex
+        ? nextExerciseIndex
+        : previousExerciseIndex;
+      const completedExercise = exercises[completedExerciseIndex];
+      const completedUntil = nextExerciseIndex === previousExerciseIndex
+        ? Math.max(0, nextSetIndex - 1)
+        : buildPlannedReps(completedExercise).length;
+
+      if (completedExercise && completedUntil > 0) {
+        const planned = buildPlannedReps(completedExercise);
+        setCompletedSets((prev) => {
+          const bySetIndex = new Map(
+            prev
+              .filter((item) => item.exerciseId === completedExercise.id)
+              .map((item) => [item.setIndex, item] as const),
+          );
+          const completed = Array.from({ length: completedUntil }, (_, index) => {
+            const setIndex = index + 1;
+            return bySetIndex.get(setIndex) ?? {
+              id: `watch-sync-${completedExercise.id}-${setIndex}`,
+              exerciseId: completedExercise.id,
+              setIndex,
+              targetRepsMin: planned[index] ?? 10,
+              actualReps: null,
+              actualWeightKg: null,
+              createdAt: new Date().toISOString(),
+            };
+          });
+          return [
+            ...prev.filter((item) => item.exerciseId !== completedExercise.id),
+            ...completed,
+          ];
+        });
+      }
+    }
     setExerciseIndex(nextExerciseIndex);
     setRestChoice(getPlannedRestForIndex(nextExerciseIndex));
     const remaining = Math.max(0, Number(state.restRemaining) || 0);
@@ -323,7 +365,7 @@ export function GuidedWorkoutClient({
       if (Number.isFinite(state.weight)) setWeightByKey((prev) => ({ ...prev, [key]: Number(state.weight) }));
     }
     lastSyncedWatchPositionRef.current = `${nextExerciseIndex}:${nextSetIndex}:${remaining}:${state.restStatus}`;
-  }, [clearRestTimer, exercises, getPlannedRestForIndex, router, sessionId]);
+  }, [clearRestTimer, exerciseIndex, exercises, getPlannedRestForIndex, router, sessionId]);
 
   useEffect(() => {
     const onRealtimeState = (event: Event) => {
