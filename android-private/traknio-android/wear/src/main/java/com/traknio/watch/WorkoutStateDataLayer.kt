@@ -96,17 +96,28 @@ object WatchWorkoutStateDataLayer {
 
     fun publish(context: Context, state: WorkoutStateMessage) {
         scope.launch {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "workout_state_wear_emit_start t=${System.currentTimeMillis()} action=${state.action ?: "confirmed"} revision=${state.revision.takeLast(24)}")
+            }
             val nodes = runCatching { Wearable.getNodeClient(context.applicationContext).connectedNodes.await() }
                 .getOrElse { emptyList() }
-            Log.i(TAG, "workout_state_send action=${state.action ?: "confirmed"} revision=${state.revision.takeLast(24)} nodes=${nodes.size}")
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "workout_state_wear_emit_nodes t=${System.currentTimeMillis()} action=${state.action ?: "confirmed"} revision=${state.revision.takeLast(24)} nodes=${nodes.size} connected=${nodes.isNotEmpty()}")
+            }
             nodes.forEach { node ->
                 runCatching {
                     Wearable.getMessageClient(context.applicationContext)
                         .sendMessage(node.id, WearPairingPaths.WORKOUT_STATE, state.toJson().toByteArray())
                         .await()
                 }.onSuccess {
-                    Log.i(TAG, "workout_state_send_delivered action=${state.action ?: "confirmed"} nodeFound=true")
-                }.onFailure { Log.w(TAG, "state delivery failed action=${state.action ?: "confirmed"} type=${it.javaClass.simpleName}") }
+                    if (BuildConfig.DEBUG) {
+                        Log.d(TAG, "workout_state_wear_emit_success t=${System.currentTimeMillis()} action=${state.action ?: "confirmed"} revision=${state.revision.takeLast(24)} node=${node.id.takeLast(8)}")
+                    }
+                }.onFailure {
+                    if (BuildConfig.DEBUG) {
+                        Log.d(TAG, "workout_state_wear_emit_failed t=${System.currentTimeMillis()} action=${state.action ?: "confirmed"} revision=${state.revision.takeLast(24)} node=${node.id.takeLast(8)} error=${it.javaClass.simpleName}")
+                    }
+                }
             }
         }
     }
@@ -132,7 +143,9 @@ object WatchWorkoutStateDataLayer {
     }
 
     fun receive(context: Context, state: WorkoutStateMessage) {
-        Log.i(TAG, "workout_state_received action=${state.action ?: "confirmed"} revision=${state.revision.takeLast(24)} optimistic=${state.optimistic}")
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, "workout_state_wear_received t=${System.currentTimeMillis()} action=${state.action ?: "confirmed"} revision=${state.revision.takeLast(24)} session=${state.sessionId.takeLast(8)} optimistic=${state.optimistic}")
+        }
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(KEY_LAST_STATE, state.toJson()).apply()
         WatchWorkoutStateEvents.emit(state)

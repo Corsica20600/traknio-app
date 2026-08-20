@@ -10,11 +10,18 @@ import org.json.JSONObject
 
 class WatchWearListenerService : WearableListenerService() {
     override fun onMessageReceived(messageEvent: MessageEvent) {
-        Log.i(TAG, "watch listener message path=${messageEvent.path} bytes=${messageEvent.data.size}")
         if (messageEvent.path == WearPairingPaths.WORKOUT_STATE) {
-            WorkoutStateMessage.fromJson(String(messageEvent.data))?.let {
-                WatchWorkoutStateDataLayer.receive(applicationContext, it)
+            val state = WorkoutStateMessage.fromJson(String(messageEvent.data))
+            if (state == null) {
+                if (BuildConfig.DEBUG) {
+                    Log.d(TAG, "workout_state_wear_ignored t=${System.currentTimeMillis()} reason=payload_invalid")
+                }
+                return
             }
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "workout_state_wear_received t=${System.currentTimeMillis()} action=${state.action ?: "confirmed"} revision=${state.revision.takeLast(24)} session=${state.sessionId.takeLast(8)}")
+            }
+            WatchWorkoutStateDataLayer.receive(applicationContext, state)
             return
         }
         if (messageEvent.path != WearPairingPaths.ACCOUNT_STATE) return

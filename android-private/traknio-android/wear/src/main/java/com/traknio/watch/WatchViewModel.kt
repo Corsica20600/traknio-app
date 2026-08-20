@@ -95,6 +95,7 @@ class WatchViewModel(context: Context) : ViewModel() {
     fun toggleRestPause() {
         val ready = _state.value as? WatchScreenState.Ready ?: return
         if (ready.busyAction != null) return
+
         if (ready.displayRestRemaining <= 0) return
         if (ready.payload.restStatus == "PAUSED") {
             perform("resume-rest", optimistic = {
@@ -198,6 +199,10 @@ class WatchViewModel(context: Context) : ViewModel() {
         val payload = latestPayload ?: return
         val ready = _state.value as? WatchScreenState.Ready ?: return
         if (ready.busyAction != null) return
+
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, "workout_state_wear_ui_emit t=${System.currentTimeMillis()} action=$actionId revision=${payload.revision.takeLast(24)}")
+        }
 
         val mutatesRest = actionId in REST_ACTIONS
         if (mutatesRest) restMutationPending = true
@@ -389,14 +394,24 @@ class WatchViewModel(context: Context) : ViewModel() {
     }
 
     private fun applyRealtimeState(state: WorkoutStateMessage) {
-        val current = latestPayload ?: return
+        val current = latestPayload
+        if (current == null) {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "workout_state_wear_ignored t=${System.currentTimeMillis()} reason=viewmodel_unavailable action=${state.action ?: "confirmed"} revision=${state.revision.takeLast(24)}")
+            }
+            return
+        }
         if (state.sessionId != current.sessionId) {
-            Log.i(TAG, "workout_state_ignored reason=session action=${state.action ?: "confirmed"}")
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "workout_state_wear_ignored t=${System.currentTimeMillis()} reason=session_different action=${state.action ?: "confirmed"} revision=${state.revision.takeLast(24)}")
+            }
             return
         }
         val optimistic = state.optimistic || state.revision.startsWith("optimistic:")
         if (!optimistic && revisionMillis(state.revision) < newestRevisionMs) {
-            Log.i(TAG, "workout_state_ignored reason=stale action=${state.action ?: "confirmed"}")
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "workout_state_wear_ignored t=${System.currentTimeMillis()} reason=revision_stale action=${state.action ?: "confirmed"} revision=${state.revision.takeLast(24)}")
+            }
             return
         }
         val exerciseName = current.exercises.firstOrNull { it.index == state.exerciseIndex }?.name ?: current.exerciseName
@@ -420,6 +435,10 @@ class WatchViewModel(context: Context) : ViewModel() {
             confirmedRestMutation = !optimistic,
             finalizeMetrics = !optimistic,
         )
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, "workout_state_wear_applied t=${System.currentTimeMillis()} action=${state.action ?: "confirmed"} revision=${state.revision.takeLast(24)} optimistic=$optimistic")
+            Log.d(TAG, "workout_state_wear_ui_updated t=${System.currentTimeMillis()} action=${state.action ?: "confirmed"} revision=${state.revision.takeLast(24)}")
+        }
     }
 
     private fun revisionMillis(revision: String?): Long = runCatching {

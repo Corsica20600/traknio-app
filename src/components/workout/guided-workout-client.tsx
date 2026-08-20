@@ -106,6 +106,7 @@ type RealtimeWorkoutState = {
 declare global {
   interface Window {
     TraknioWorkout?: { publish: (raw: string) => void };
+    __TRAKNIO_DEBUG__?: boolean;
   }
 }
 
@@ -237,6 +238,9 @@ export function GuidedWorkoutClient({
     }
     if (typeof window === "undefined" || !window.TraknioWorkout) return;
     try {
+      if (window.__TRAKNIO_DEBUG__) {
+        console.debug(`[WORKOUT_STATE] workout_state_phone_ui_emit t=${Date.now()} action=${state.action ?? "confirmed"} revision=${state.revision.slice(-24)}`);
+      }
       window.TraknioWorkout.publish(JSON.stringify(state));
     } catch {
       // The browser remains fully functional when running outside the Android shell.
@@ -297,6 +301,9 @@ export function GuidedWorkoutClient({
           if (data.summary) setSummary(data.summary);
           else router.refresh();
         }).catch(() => undefined);
+      }
+      if (typeof window !== "undefined" && window.__TRAKNIO_DEBUG__) {
+        console.debug(`[WORKOUT_STATE] workout_state_phone_ui_applied t=${Date.now()} action=${state.action ?? "confirmed"} revision=${state.revision.slice(-24)} status=COMPLETED`);
       }
       return;
     }
@@ -365,6 +372,9 @@ export function GuidedWorkoutClient({
       if (Number.isFinite(state.weight)) setWeightByKey((prev) => ({ ...prev, [key]: Number(state.weight) }));
     }
     lastSyncedWatchPositionRef.current = `${nextExerciseIndex}:${nextSetIndex}:${remaining}:${state.restStatus}`;
+    if (typeof window !== "undefined" && window.__TRAKNIO_DEBUG__) {
+      console.debug(`[WORKOUT_STATE] workout_state_phone_ui_applied t=${Date.now()} action=${state.action ?? "confirmed"} revision=${state.revision.slice(-24)} status=${state.status}`);
+    }
   }, [clearRestTimer, exerciseIndex, exercises, getPlannedRestForIndex, router, sessionId]);
 
   useEffect(() => {

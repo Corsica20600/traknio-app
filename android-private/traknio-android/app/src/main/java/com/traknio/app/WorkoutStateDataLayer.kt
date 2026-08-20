@@ -26,24 +26,33 @@ object WorkoutStateDataLayer {
     fun publish(context: Context, stateJson: String) {
         val normalized = normalize(stateJson) ?: return
         scope.launch {
+            val state = JSONObject(normalized)
+            val action = state.optString("action", "confirmed")
+            val revision = state.optString("revision").takeLast(24)
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "workout_state_phone_emit_start t=${System.currentTimeMillis()} action=$action revision=$revision")
+            }
             val nodes = runCatching { Wearable.getNodeClient(context.applicationContext).connectedNodes.await() }
                 .getOrElse {
                     Log.w(TAG, "nodes unavailable type=${it.javaClass.simpleName}")
                     emptyList()
                 }
-            val state = JSONObject(normalized)
-            val action = state.optString("action", "confirmed")
-            val revision = state.optString("revision").takeLast(24)
-            Log.i(TAG, "workout_state_send action=$action revision=$revision nodes=${nodes.size}")
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "workout_state_phone_emit_nodes t=${System.currentTimeMillis()} action=$action revision=$revision nodes=${nodes.size} connected=${nodes.isNotEmpty()}")
+            }
             nodes.forEach { node ->
                 runCatching {
                     Wearable.getMessageClient(context.applicationContext)
                         .sendMessage(node.id, WearPairingPaths.WORKOUT_STATE, normalized.toByteArray())
                         .await()
                 }.onSuccess {
-                    Log.i(TAG, "workout_state_send_delivered action=$action nodeFound=true")
+                    if (BuildConfig.DEBUG) {
+                        Log.d(TAG, "workout_state_phone_emit_success t=${System.currentTimeMillis()} action=$action revision=$revision node=${node.id.takeLast(8)}")
+                    }
                 }.onFailure {
-                    Log.w(TAG, "state delivery failed action=$action type=${it.javaClass.simpleName}")
+                    if (BuildConfig.DEBUG) {
+                        Log.d(TAG, "workout_state_phone_emit_failed t=${System.currentTimeMillis()} action=$action revision=$revision node=${node.id.takeLast(8)} error=${it.javaClass.simpleName}")
+                    }
                 }
             }
         }
@@ -52,10 +61,12 @@ object WorkoutStateDataLayer {
     fun receiveFromWatch(context: Context, stateJson: String) {
         val normalized = normalize(stateJson) ?: return
         val state = JSONObject(normalized)
-        Log.i(
-            TAG,
-            "workout_state_received action=${state.optString("action", "confirmed")} revision=${state.optString("revision").takeLast(24)} optimistic=${state.optBoolean("optimistic", false)}",
-        )
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                TAG,
+                "workout_state_phone_received t=${System.currentTimeMillis()} action=${state.optString("action", "confirmed")} revision=${state.optString("revision").takeLast(24)} optimistic=${state.optBoolean("optimistic", false)}",
+            )
+        }
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(KEY_LAST_STATE, normalized).apply()
         context.applicationContext.sendBroadcast(

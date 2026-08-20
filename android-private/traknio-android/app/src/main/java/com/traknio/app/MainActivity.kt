@@ -12,6 +12,7 @@ import android.view.View
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.webkit.CookieManager
+import android.webkit.ConsoleMessage
 import android.webkit.WebResourceError
 import android.webkit.WebResourceResponse
 import android.webkit.WebResourceRequest
@@ -52,7 +53,21 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun publish(raw: String) {
             val currentHost = runCatching { Uri.parse(binding.webViewTraknio.url.orEmpty()).host?.lowercase() }.getOrNull()
-            if (currentHost !in allowedHosts) return
+            val debugState = runCatching { JSONObject(raw) }.getOrNull()
+            val action = debugState?.optString("action", "confirmed") ?: "invalid"
+            val revision = debugState?.optString("revision")?.takeLast(24).orEmpty()
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    "WORKOUT_STATE",
+                    "workout_state_bridge_received t=${System.currentTimeMillis()} action=$action revision=$revision host=${currentHost ?: "none"} allowed=${currentHost in allowedHosts}",
+                )
+            }
+            if (currentHost !in allowedHosts) {
+                if (BuildConfig.DEBUG) {
+                    Log.d("WORKOUT_STATE", "workout_state_bridge_rejected t=${System.currentTimeMillis()} reason=host_not_allowed action=$action revision=$revision")
+                }
+                return
+            }
             WorkoutStateDataLayer.publish(applicationContext, raw)
         }
     }
@@ -161,6 +176,13 @@ class MainActivity : AppCompatActivity() {
         binding.webViewTraknio.addJavascriptInterface(workoutStateBridge, "TraknioWorkout")
         binding.webViewTraknio.setBackgroundColor(Color.rgb(10, 19, 40))
         binding.webViewTraknio.webChromeClient = object : WebChromeClient() {
+            override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                if (BuildConfig.DEBUG && consoleMessage?.message()?.startsWith("[WORKOUT_STATE]") == true) {
+                    Log.d("WORKOUT_STATE", consoleMessage.message().removePrefix("[WORKOUT_STATE] "))
+                }
+                return super.onConsoleMessage(consoleMessage)
+            }
+
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                 super.onProgressChanged(view, newProgress)
                 if (binding.launchOverlay.visibility == View.VISIBLE) {
@@ -211,6 +233,7 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 updateWorkoutScreenPolicy(url)
+                binding.webViewTraknio.evaluateJavascript("window.__TRAKNIO_DEBUG__=${BuildConfig.DEBUG};", null)
                 // Auth.js writes its persistent, HttpOnly session cookie during the callback.
                 // Explicitly flush it so it survives process termination and normal device reboot.
                 CookieManager.getInstance().flush()
@@ -351,8 +374,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun dispatchWorkoutStateToWeb(raw: String) {
         if (!::binding.isInitialized) return
+        val state = runCatching { JSONObject(raw) }.getOrNull()
+        val action = state?.optString("action", "confirmed") ?: "invalid"
+        val revision = state?.optString("revision")?.takeLast(24).orEmpty()
         val event = "window.dispatchEvent(new CustomEvent('traknio:workout-state',{detail:${JSONObject.quote(raw)}}));"
-        binding.webViewTraknio.evaluateJavascript(event, null)
+        binding.webViewTraknio.evaluateJavascript(event) {
+            if (BuildConfig.DEBUG) {
+                Log.d("WORKOUT_STATE", "workout_state_phone_ui_event_dispatched t=${System.currentTimeMillis()} action=$action revision=$revision")
+            }
+        }
     }
 
     private fun showWebError() {
