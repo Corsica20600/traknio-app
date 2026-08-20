@@ -275,17 +275,18 @@ export function GuidedWorkoutClient({
     existing: completedForExercise.find((set) => set.setIndex === idx + 1),
   }));
   const activeSet = setRows[Math.max(0, Math.min(nextSetIndex - 1, setRows.length - 1))];
-  const activeKey = activeSet ? `${exercise.id}:${activeSet.setIndex}` : "";
+  const activeSetIndex = activeSet?.setIndex ?? null;
+  const activeKey = activeSetIndex != null ? `${exercise.id}:${activeSetIndex}` : "";
 
   useEffect(() => {
-    if (!activeSet || !activeKey) return;
+    if (activeSetIndex == null || !activeKey) return;
     let cancelled = false;
     const refreshLiveTarget = async () => {
       const params = new URLSearchParams({
         sessionId,
         exerciseId: exercise.id,
         programExerciseId: exercise.programExerciseId ?? "",
-        setIndex: String(activeSet.setIndex),
+        setIndex: String(activeSetIndex),
       });
       const response = await fetch(`/api/workout/live-target?${params}`, { cache: "no-store" }).catch(() => null);
       if (!response?.ok || cancelled) return;
@@ -305,7 +306,7 @@ export function GuidedWorkoutClient({
       if (document.visibilityState === "visible") void refreshLiveTarget();
     }, 15_000);
     return () => { cancelled = true; window.clearInterval(interval); };
-  }, [activeKey, activeSet, exercise.id, exercise.programExerciseId, sessionId]);
+  }, [activeKey, activeSetIndex, exercise.id, exercise.programExerciseId, sessionId]);
 
   const getPlannedRestForIndex = useCallback((index: number) => {
     const nextRest = exercises[index]?.plannedRestSeconds;
