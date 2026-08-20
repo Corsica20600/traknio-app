@@ -241,6 +241,7 @@ class TraknioWatchApi(
             restRemaining = json.optInt("restRemaining", 0),
             restStatus = json.optString("restStatus", "IDLE"),
             restUpdatedAt = json.optString("restUpdatedAt").takeIf { it.isNotBlank() },
+            revision = json.optString("revision", json.optString("restUpdatedAt", "")),
             status = json.optString("status", "IN_PROGRESS"),
             summary = parseSummary(json.optJSONObject("summary")),
             exercises = parseExercises(json.optJSONArray("exercises")),

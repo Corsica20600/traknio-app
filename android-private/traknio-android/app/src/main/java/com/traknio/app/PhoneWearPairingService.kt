@@ -22,6 +22,10 @@ class PhoneWearPairingService : WearableListenerService() {
     private val baseUrl = BuildConfig.TRAKNIO_SYNC_BASE_URL.trimEnd('/')
 
     override fun onMessageReceived(messageEvent: MessageEvent) {
+        if (messageEvent.path == WearPairingPaths.WORKOUT_STATE) {
+            WorkoutStateDataLayer.receiveFromWatch(applicationContext, String(messageEvent.data))
+            return
+        }
         if (messageEvent.path != WearPairingPaths.PAIRING_REQUEST && messageEvent.path != WearPairingPaths.ACCOUNT_STATE_REQUEST && messageEvent.path != WearPairingPaths.API_REQUEST) {
             return
         }

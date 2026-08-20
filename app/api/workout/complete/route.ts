@@ -46,9 +46,10 @@ export async function POST(request: Request) {
   }
 
   if (session.status === "COMPLETED") {
+    const completedRevision = new Date();
     await prisma.watchSession.updateMany({
       where: { workoutSessionId: sessionId },
-      data: { status: "COMPLETED", lastSyncAt: new Date() },
+      data: { status: "COMPLETED", lastSyncAt: completedRevision },
     });
 
     const completedSets = await prisma.workoutSet.findMany({
@@ -63,6 +64,7 @@ export async function POST(request: Request) {
         setsCount: completedSets.length,
         volumeTotal: completedSets.reduce((acc, set) => acc + ((set.actualReps ?? 0) * (set.actualWeightKg ?? 0)), 0),
       },
+      state: { sessionId, revision: completedRevision.toISOString(), status: "COMPLETED", exerciseIndex: 0, setIndex: 1, restRemaining: 0, restStatus: "IDLE" },
     });
   }
 
@@ -170,11 +172,12 @@ export async function POST(request: Request) {
     },
   });
 
+  const completedRevision = new Date();
   await prisma.watchSession.updateMany({
     where: { workoutSessionId: sessionId },
     data: {
       status: "COMPLETED",
-      lastSyncAt: new Date(),
+      lastSyncAt: completedRevision,
     },
   });
 
@@ -198,5 +201,6 @@ export async function POST(request: Request) {
       setsCount,
       volumeTotal,
     },
+    state: { sessionId, revision: completedRevision.toISOString(), status: "COMPLETED", exerciseIndex: 0, setIndex: 1, restRemaining: 0, restStatus: "IDLE" },
   });
 }

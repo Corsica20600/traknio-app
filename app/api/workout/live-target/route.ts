@@ -69,7 +69,7 @@ export async function POST(request: Request) {
     data: { notes: serializeSessionNotesMeta({ ...meta, liveTargets }) },
   });
 
-  await prisma.watchSession.upsert({
+  const watchState = await prisma.watchSession.upsert({
     where: { workoutSessionId: session.id },
     update: {
       currentExerciseIndex: Math.max(0, Math.floor(Number(body.currentExerciseIndex ?? session.watchSession?.currentExerciseIndex ?? 0))),
@@ -86,5 +86,19 @@ export async function POST(request: Request) {
     },
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({
+    ok: true,
+    state: {
+      sessionId: session.id,
+      revision: watchState.lastSyncAt.toISOString(),
+      status: "IN_PROGRESS",
+      exerciseIndex: watchState.currentExerciseIndex,
+      setIndex: watchState.currentSetIndex,
+      targetReps,
+      weight: targetWeightKg,
+      restRemaining: watchState.restRemainingSeconds,
+      restStatus: watchState.restStatus,
+      restUpdatedAt: watchState.restUpdatedAt?.toISOString() ?? null,
+    },
+  });
 }

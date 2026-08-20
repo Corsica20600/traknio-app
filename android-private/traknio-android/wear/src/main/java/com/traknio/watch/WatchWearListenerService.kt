@@ -11,6 +11,12 @@ import org.json.JSONObject
 class WatchWearListenerService : WearableListenerService() {
     override fun onMessageReceived(messageEvent: MessageEvent) {
         Log.i(TAG, "watch listener message path=${messageEvent.path} bytes=${messageEvent.data.size}")
+        if (messageEvent.path == WearPairingPaths.WORKOUT_STATE) {
+            WorkoutStateMessage.fromJson(String(messageEvent.data))?.let {
+                WatchWorkoutStateDataLayer.receive(applicationContext, it)
+            }
+            return
+        }
         if (messageEvent.path != WearPairingPaths.ACCOUNT_STATE) return
 
         val accountPairingId = runCatching {

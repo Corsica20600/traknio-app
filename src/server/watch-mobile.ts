@@ -24,6 +24,7 @@ type WatchPayload = {
   restRemaining: number;
   restStatus: "IDLE" | "ACTIVE" | "PAUSED";
   restUpdatedAt: string | null;
+  revision: string;
   status: string;
   summary?: WatchSessionSummary;
   exercises: WatchExerciseSummary[];
@@ -360,6 +361,7 @@ export async function getWatchBootstrapPayload(sessionId?: string, userProfileId
     restRemaining,
     restStatus,
     restUpdatedAt: watchRest.updatedAt?.toISOString() ?? null,
+    revision: session.watchSession?.lastSyncAt?.toISOString() ?? session.updatedAt.toISOString(),
     status: session.status === "IN_PROGRESS" && session.watchSession?.status === "PAUSED" ? "READY_TO_COMPLETE" : session.status,
     summary: await getWatchSessionSummary(session, db),
     exercises,
@@ -371,12 +373,12 @@ export async function getWatchPayload(sessionId?: string, userProfileId?: string
   const session = sessionId
     ? await db.workoutSession.findUnique({
         where: userProfileId ? { id: sessionId, userProfileId } : { id: sessionId },
-        select: { id: true, title: true, status: true, notes: true, programDayId: true, watchSession: { select: { currentExerciseIndex: true, currentSetIndex: true, status: true, restStatus: true, restRemainingSeconds: true, restUpdatedAt: true } } },
+        select: { id: true, title: true, status: true, notes: true, programDayId: true, updatedAt: true, watchSession: { select: { currentExerciseIndex: true, currentSetIndex: true, status: true, restStatus: true, restRemainingSeconds: true, restUpdatedAt: true, lastSyncAt: true } } },
       })
     : await db.workoutSession.findFirst({
         where: { userProfileId: userProfileId ?? (await getOrCreateDemoProfile()).id, status: "IN_PROGRESS" },
         orderBy: { createdAt: "desc" },
-        select: { id: true, title: true, status: true, notes: true, programDayId: true, watchSession: { select: { currentExerciseIndex: true, currentSetIndex: true, status: true, restStatus: true, restRemainingSeconds: true, restUpdatedAt: true } } },
+        select: { id: true, title: true, status: true, notes: true, programDayId: true, updatedAt: true, watchSession: { select: { currentExerciseIndex: true, currentSetIndex: true, status: true, restStatus: true, restRemainingSeconds: true, restUpdatedAt: true, lastSyncAt: true } } },
       });
   if (!session) return null;
 
@@ -403,6 +405,7 @@ export async function getWatchPayload(sessionId?: string, userProfileId?: string
       totalExercises: exercises.length, setIndex, totalSets: 3, targetReps: DEFAULT_REPS[Math.min(DEFAULT_REPS.length - 1, setIndex - 1)] ?? DEFAULT_REPS[0],
       weight: currentSet?.actualWeightKg ?? null, activeWeight: currentSet?.actualWeightKg ?? null, proposedWeight: null, weightConfirmationRequired: false,
       isBodyweight: isBodyweightExercise(exercise), restRemaining, restStatus: restRemaining > 0 ? watchRest.status : "IDLE", restUpdatedAt: watchRest.updatedAt?.toISOString() ?? null,
+      revision: session.watchSession?.lastSyncAt?.toISOString() ?? session.updatedAt.toISOString(),
       status: session.status, exercises: [],
     };
   }
@@ -441,6 +444,7 @@ export async function getWatchPayload(sessionId?: string, userProfileId?: string
     proposedWeight: liveWeight != null && liveWeight > 0 && currentSet?.actualWeightKg !== liveWeight ? liveWeight : null,
     weightConfirmationRequired: liveWeight != null && liveWeight > 0 && currentSet?.actualWeightKg !== liveWeight,
     isBodyweight: isBodyweightExercise(programExercise.exercise), restRemaining, restStatus: restRemaining > 0 ? watchRest.status : "IDLE", restUpdatedAt: watchRest.updatedAt?.toISOString() ?? null,
+    revision: session.watchSession?.lastSyncAt?.toISOString() ?? session.updatedAt.toISOString(),
     status: session.status === "IN_PROGRESS" && session.watchSession?.status === "PAUSED" ? "READY_TO_COMPLETE" : session.status,
     exercises: [],
   };

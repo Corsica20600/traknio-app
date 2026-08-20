@@ -157,9 +157,10 @@ object WatchPayloadJson {
         weightConfirmationRequired = json.optBoolean("weightConfirmationRequired", false),
         isBodyweight = json.optBoolean("isBodyweight", false),
         restRemaining = json.optInt("restRemaining", 0),
-        restStatus = json.optString("restStatus", "IDLE"),
-        restUpdatedAt = json.optString("restUpdatedAt").takeIf { it.isNotBlank() },
-        status = json.optString("status", "IN_PROGRESS"),
+            restStatus = json.optString("restStatus", "IDLE"),
+            restUpdatedAt = json.optString("restUpdatedAt").takeIf { it.isNotBlank() },
+            revision = json.optString("revision", json.optString("restUpdatedAt", "")),
+            status = json.optString("status", "IN_PROGRESS"),
         summary = json.optJSONObject("summary")?.let { summary ->
             WatchSessionSummary(
                 durationSeconds = if (summary.isNull("durationSeconds")) null else summary.optInt("durationSeconds"),

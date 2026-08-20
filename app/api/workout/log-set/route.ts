@@ -94,7 +94,7 @@ export async function POST(request: Request) {
     const nextExerciseIndex = exerciseFinished ? baseExerciseIndex + 1 : baseExerciseIndex;
     const nextSetIndex = exerciseFinished ? 1 : Math.max(1, completedSet.setIndex + 1);
 
-    await tx.watchSession.upsert({
+    const watchState = await tx.watchSession.upsert({
     where: { workoutSessionId: sessionId },
     update: {
       currentExerciseIndex: nextExerciseIndex,
@@ -116,18 +116,30 @@ export async function POST(request: Request) {
       lastSyncAt: new Date(),
     },
     });
-    return completedSet;
+    return { completedSet, watchState };
   });
 
   return NextResponse.json({
     set: {
-      id: saved.id,
-      exerciseId: saved.exerciseId,
-      setIndex: saved.setIndex,
-      targetRepsMin: saved.targetRepsMin,
-      actualReps: saved.actualReps,
-      actualWeightKg: saved.actualWeightKg,
-      createdAt: saved.createdAt.toISOString(),
+      id: saved.completedSet.id,
+      exerciseId: saved.completedSet.exerciseId,
+      setIndex: saved.completedSet.setIndex,
+      targetRepsMin: saved.completedSet.targetRepsMin,
+      actualReps: saved.completedSet.actualReps,
+      actualWeightKg: saved.completedSet.actualWeightKg,
+      createdAt: saved.completedSet.createdAt.toISOString(),
+    },
+    state: {
+      sessionId,
+      revision: saved.watchState.lastSyncAt.toISOString(),
+      status: "IN_PROGRESS",
+      exerciseIndex: saved.watchState.currentExerciseIndex,
+      setIndex: saved.watchState.currentSetIndex,
+      targetReps: null,
+      weight: null,
+      restRemaining: saved.watchState.restRemainingSeconds,
+      restStatus: saved.watchState.restStatus,
+      restUpdatedAt: saved.watchState.restUpdatedAt?.toISOString() ?? null,
     },
   });
 }

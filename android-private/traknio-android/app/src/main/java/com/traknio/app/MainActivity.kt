@@ -2,6 +2,8 @@ package com.traknio.app
 
 import android.app.Activity
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
@@ -16,8 +18,10 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.JavascriptInterface
 import android.widget.Toast
 import android.util.Log
+import org.json.JSONObject
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -36,6 +40,21 @@ class MainActivity : AppCompatActivity() {
     private val supportedImageMimeTypes = arrayOf("image/jpeg", "image/png", "image/webp")
     private var fileChooserCallback: android.webkit.ValueCallback<Array<Uri>>? = null
     private var isInitialPageLoad = true
+    private var workoutStateReceiverRegistered = false
+    private val workoutStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: Intent?) {
+            val raw = intent?.getStringExtra(WorkoutStateDataLayer.EXTRA_STATE_JSON) ?: return
+            dispatchWorkoutStateToWeb(raw)
+        }
+    }
+    private val workoutStateBridge = object {
+        @JavascriptInterface
+        fun publish(raw: String) {
+            val currentHost = runCatching { Uri.parse(binding.webViewTraknio.url.orEmpty()).host?.lowercase() }.getOrNull()
+            if (currentHost !in allowedHosts) return
+            WorkoutStateDataLayer.publish(applicationContext, raw)
+        }
+    }
     private val fileChooserLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val callback = fileChooserCallback ?: return@registerForActivityResult
         fileChooserCallback = null
@@ -83,6 +102,8 @@ class MainActivity : AppCompatActivity() {
                 null,
             )
             PhoneWearAccountSync.broadcastConnectedAccount(applicationContext)
+            registerWorkoutStateReceiver()
+            WorkoutStateDataLayer.lastState(applicationContext)?.let(::dispatchWorkoutStateToWeb)
         }
     }
 
@@ -90,6 +111,7 @@ class MainActivity : AppCompatActivity() {
         if (::binding.isInitialized) {
             binding.webViewTraknio.onPause()
             CookieManager.getInstance().flush()
+            unregisterWorkoutStateReceiver()
         }
         super.onPause()
     }
@@ -135,6 +157,7 @@ class MainActivity : AppCompatActivity() {
         binding.webViewTraknio.settings.databaseEnabled = true
         binding.webViewTraknio.settings.loadsImagesAutomatically = true
         binding.webViewTraknio.settings.allowContentAccess = true
+        binding.webViewTraknio.addJavascriptInterface(workoutStateBridge, "TraknioWorkout")
         binding.webViewTraknio.setBackgroundColor(Color.rgb(10, 19, 40))
         binding.webViewTraknio.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
@@ -191,6 +214,7 @@ class MainActivity : AppCompatActivity() {
                 // Explicitly flush it so it survives process termination and normal device reboot.
                 CookieManager.getInstance().flush()
                 PhoneWearAccountSync.broadcastConnectedAccount(applicationContext)
+                WorkoutStateDataLayer.lastState(applicationContext)?.let(::dispatchWorkoutStateToWeb)
                 binding.webLoading.visibility = View.GONE
                 hideLaunchOverlay()
             }
@@ -305,6 +329,25 @@ class MainActivity : AppCompatActivity() {
         fileChooserCallback = null
         CookieManager.getInstance().flush()
         super.onDestroy()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun registerWorkoutStateReceiver() {
+        if (workoutStateReceiverRegistered) return
+        registerReceiver(workoutStateReceiver, IntentFilter(WorkoutStateDataLayer.ACTION_STATE_RECEIVED))
+        workoutStateReceiverRegistered = true
+    }
+
+    private fun unregisterWorkoutStateReceiver() {
+        if (!workoutStateReceiverRegistered) return
+        unregisterReceiver(workoutStateReceiver)
+        workoutStateReceiverRegistered = false
+    }
+
+    private fun dispatchWorkoutStateToWeb(raw: String) {
+        if (!::binding.isInitialized) return
+        val event = "window.dispatchEvent(new CustomEvent('traknio:workout-state',{detail:${JSONObject.quote(raw)}}));"
+        binding.webViewTraknio.evaluateJavascript(event, null)
     }
 
     private fun showWebError() {

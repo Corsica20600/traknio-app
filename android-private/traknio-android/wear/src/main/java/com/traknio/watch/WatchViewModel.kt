@@ -33,6 +33,7 @@ class WatchViewModel(context: Context) : ViewModel() {
     private var latestKey: String? = null
     private var deadline: RestDeadline? = null
     private var newestRestUpdatedAt: String? = null
+    private var newestRevisionMs = Long.MIN_VALUE
     private var restMutationPending = false
     private var pollingJob: Job? = null
     private var pairingInProgress = false
@@ -46,6 +47,9 @@ class WatchViewModel(context: Context) : ViewModel() {
             WatchRelayEvents.flow.collectLatest { result ->
                 applyRelayResult(result)
             }
+        }
+        viewModelScope.launch {
+            WatchWorkoutStateEvents.flow.collectLatest(::applyRealtimeState)
         }
     }
 
@@ -163,6 +167,7 @@ class WatchViewModel(context: Context) : ViewModel() {
             ensurePaired()
             applyPayload(api.currentSession(latestPayload?.sessionId, bootstrap = latestPayload == null), syncLabel = "Sync OK")
             consumeStoredRelayResults()
+            WatchWorkoutStateDataLayer.consumeLast(appContext)?.let(::applyRealtimeState)
         } catch (error: Throwable) {
             if (isPairingRequired(error)) {
                 tokenStore.clear()
@@ -170,6 +175,7 @@ class WatchViewModel(context: Context) : ViewModel() {
                     ensurePaired()
                     applyPayload(api.currentSession(latestPayload?.sessionId, bootstrap = latestPayload == null), syncLabel = "Sync OK")
                     consumeStoredRelayResults()
+                    WatchWorkoutStateDataLayer.consumeLast(appContext)?.let(::applyRealtimeState)
                 }.isSuccess
                 if (recovered) return
             }
@@ -194,7 +200,9 @@ class WatchViewModel(context: Context) : ViewModel() {
         viewModelScope.launch {
             try {
                 ensurePaired()
-                applyPayload(action(payload), syncLabel = "Sync OK", confirmedRestMutation = mutatesRest)
+                val result = action(payload)
+                applyPayload(result, syncLabel = "Sync OK", confirmedRestMutation = mutatesRest)
+                WatchWorkoutStateDataLayer.publish(appContext, result)
             } catch (error: Throwable) {
                 if (error is WatchRelayQueuedException) {
                     val queued = _state.value as? WatchScreenState.Ready
@@ -311,6 +319,8 @@ class WatchViewModel(context: Context) : ViewModel() {
 
     private fun applyPayload(incoming: WatchPayload, syncLabel: String, confirmedRestMutation: Boolean = false) {
         val currentPayload = latestPayload
+        val incomingRevisionMs = revisionMillis(incoming.revision)
+        if (currentPayload?.sessionId == incoming.sessionId && incomingRevisionMs < newestRevisionMs) return
         val restSnapshotIsCurrent = confirmedRestMutation || currentPayload == null || currentPayload.sessionId != incoming.sessionId ||
             (!restMutationPending && isRestSnapshotAtLeastAsRecent(newestRestUpdatedAt ?: currentPayload.restUpdatedAt, incoming.restUpdatedAt))
         val payloadWithLocalExercises = if (incoming.exercises.isEmpty() && currentPayload?.sessionId == incoming.sessionId) {
@@ -330,6 +340,7 @@ class WatchViewModel(context: Context) : ViewModel() {
             restMutationPending = false
         }
         latestPayload = payload
+        newestRevisionMs = maxOf(newestRevisionMs, incomingRevisionMs)
         if (payload.status == "IN_PROGRESS") {
             val health = exerciseHealth.snapshot.value
             if (health.sessionId != payload.sessionId || health.state != "ACTIVE") {
@@ -361,6 +372,33 @@ class WatchViewModel(context: Context) : ViewModel() {
             pausedRestRemaining = if (isPaused) payload.restRemaining else null,
         )
     }
+
+    private fun applyRealtimeState(state: WorkoutStateMessage) {
+        val current = latestPayload ?: return
+        if (state.sessionId != current.sessionId || revisionMillis(state.revision) < newestRevisionMs) return
+        val exerciseName = current.exercises.firstOrNull { it.index == state.exerciseIndex }?.name ?: current.exerciseName
+        applyPayload(
+            current.copy(
+                exerciseName = exerciseName,
+                exerciseIndex = state.exerciseIndex + 1,
+                setIndex = state.setIndex,
+                targetReps = state.targetReps ?: current.targetReps,
+                weight = state.weight ?: current.weight,
+                activeWeight = state.weight ?: current.activeWeight,
+                restRemaining = state.restRemaining,
+                restStatus = state.restStatus,
+                restUpdatedAt = state.restUpdatedAt ?: current.restUpdatedAt,
+                revision = state.revision,
+                status = state.status,
+            ),
+            syncLabel = "Synchronisé",
+            confirmedRestMutation = true,
+        )
+    }
+
+    private fun revisionMillis(revision: String?): Long = runCatching {
+        java.time.Instant.parse(revision).toEpochMilli()
+    }.getOrDefault(0L)
 
     private fun finalizeExerciseMetrics(sessionId: String) {
         if (!metricsFinalizationInFlight.add(sessionId)) return

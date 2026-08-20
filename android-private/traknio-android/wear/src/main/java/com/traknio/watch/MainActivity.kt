@@ -740,7 +740,7 @@ private fun ExerciseDetailLongTitleUltraPreview() {
 private fun previewWorkoutPayload() = WatchPayload(
     sessionId = "preview", workoutTitle = "Push", exerciseName = "Hack Squat", exerciseIndex = 2, totalExercises = 8,
     setIndex = 3, totalSets = 3, targetReps = 12, weight = 100.0, activeWeight = 100.0, proposedWeight = null,
-    weightConfirmationRequired = false, isBodyweight = false, restRemaining = 0, restStatus = "IDLE", restUpdatedAt = null, status = "IN_PROGRESS",
+    weightConfirmationRequired = false, isBodyweight = false, restRemaining = 0, restStatus = "IDLE", restUpdatedAt = null, revision = "preview", status = "IN_PROGRESS",
     exercises = listOf(
         WatchExerciseSummary(0, "Développé incliné · haltères", 4, 4, 4, 10, 40.0),
         WatchExerciseSummary(1, "Hack Squat", 3, 2, 3, 12, 100.0),

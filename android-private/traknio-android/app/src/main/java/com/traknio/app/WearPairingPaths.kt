@@ -8,4 +8,5 @@ object WearPairingPaths {
     const val API_REQUEST = "/traknio/watch/api/request"
     const val API_STATUS = "/traknio/watch/api/status"
     const val API_RESPONSE = "/traknio/watch/api/response"
+    const val WORKOUT_STATE = "/traknio/watch/workout/state"
 }
