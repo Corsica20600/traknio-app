@@ -1,7 +1,6 @@
 import { randomUUID } from "crypto";
 import { BlobNotFoundError, del, get, put } from "@vercel/blob";
 import { getVercelOidcToken } from "@vercel/oidc";
-import sharp from "sharp";
 import { prisma } from "@/src/lib/prisma";
 import type { ProgressPhotoItem } from "@/src/types/body-evolution";
 
@@ -165,6 +164,9 @@ export async function createProgressPhoto(
     logProgressPhotoPipeline("server_signature_verified", { mimeType: detectedMimeType, byteSize: source.byteLength });
 
     stage = "optimize";
+    // Do not load the native image processor for pages that only need photo metadata.
+    // Vercel loads this module lazily on the upload route, where it is actually used.
+    const { default: sharp } = await import("sharp");
     const optimized = await sharp(source, { limitInputPixels: MAX_INPUT_PIXELS, failOn: "error" })
       .rotate()
       .resize(MAX_IMAGE_EDGE, MAX_IMAGE_EDGE, { fit: "inside", withoutEnlargement: true })
