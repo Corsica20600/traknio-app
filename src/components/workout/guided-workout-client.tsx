@@ -91,6 +91,8 @@ type WorkoutSummary = {
 type RealtimeWorkoutState = {
   sessionId: string;
   revision: string;
+  action?: string;
+  optimistic?: boolean;
   status: string;
   exerciseIndex: number;
   setIndex: number;
@@ -197,6 +199,7 @@ export function GuidedWorkoutClient({
   const restActionInFlightRef = useRef(false);
   const pendingRestActionRef = useRef<{ requestId: string; operation: "pause" | "resume" } | null>(null);
   const latestRealtimeRevisionRef = useRef(0);
+  const optimisticStateUntilRef = useRef(0);
 
   const computeRemainingFromEndsAt = useCallback((endsAt: number) => {
     return Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
@@ -227,6 +230,11 @@ export function GuidedWorkoutClient({
   }, [exercises]);
 
   const publishRealtimeState = useCallback((state: RealtimeWorkoutState) => {
+    if (state.optimistic || state.revision.startsWith("optimistic:")) {
+      // A reconciliation snapshot from before this action must not undo the
+      // instantaneous cross-device update while the backend is catching up.
+      optimisticStateUntilRef.current = Date.now() + 20_000;
+    }
     if (typeof window === "undefined" || !window.TraknioWorkout) return;
     try {
       window.TraknioWorkout.publish(JSON.stringify(state));
@@ -264,12 +272,32 @@ export function GuidedWorkoutClient({
 
   const applyRealtimeState = useCallback((state: RealtimeWorkoutState) => {
     if (state.sessionId !== sessionId) return;
+    const optimistic = state.optimistic || state.revision.startsWith("optimistic:");
     const revision = Date.parse(state.revision);
-    if (Number.isFinite(revision) && revision < latestRealtimeRevisionRef.current) return;
-    if (Number.isFinite(revision)) latestRealtimeRevisionRef.current = revision;
+    if (!optimistic && Number.isFinite(revision) && revision < latestRealtimeRevisionRef.current) return;
+    if (optimistic) optimisticStateUntilRef.current = Date.now() + 20_000;
+    else if (Number.isFinite(revision)) {
+      latestRealtimeRevisionRef.current = revision;
+      optimisticStateUntilRef.current = 0;
+    }
     if (state.status === "COMPLETED") {
       clearRestTimer();
       setEnding(true);
+      // The optimistic push immediately removes the active-set UI. Once the
+      // watch confirms persistence, fetch the already-completed summary once;
+      // do not restart the 15-second reconciliation polling loop.
+      if (!optimistic) {
+        void fetch("/api/workout/complete", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionId, forceComplete: true }),
+        }).then(async (response) => {
+          if (!response.ok) return;
+          const data = await response.json() as { summary?: WorkoutSummary };
+          if (data.summary) setSummary(data.summary);
+          else router.refresh();
+        }).catch(() => undefined);
+      }
       return;
     }
     const nextExerciseIndex = Math.max(0, Math.min(exercises.length - 1, Number(state.exerciseIndex) || 0));
@@ -295,7 +323,7 @@ export function GuidedWorkoutClient({
       if (Number.isFinite(state.weight)) setWeightByKey((prev) => ({ ...prev, [key]: Number(state.weight) }));
     }
     lastSyncedWatchPositionRef.current = `${nextExerciseIndex}:${nextSetIndex}:${remaining}:${state.restStatus}`;
-  }, [clearRestTimer, exercises, getPlannedRestForIndex, sessionId]);
+  }, [clearRestTimer, exercises, getPlannedRestForIndex, router, sessionId]);
 
   useEffect(() => {
     const onRealtimeState = (event: Event) => {
@@ -324,6 +352,18 @@ export function GuidedWorkoutClient({
   }, []);
 
   const pushSyncState = useCallback((nextExerciseIndex: number, nextSetIndex: number, nextRest?: number, status: "ACTIVE" | "PAUSED" | "COMPLETED" = "ACTIVE") => {
+    publishRealtimeState({
+      sessionId,
+      revision: `optimistic:${Date.now()}`,
+      optimistic: true,
+      action: "select-exercise",
+      status: status === "COMPLETED" ? "COMPLETED" : "IN_PROGRESS",
+      exerciseIndex: Math.max(0, nextExerciseIndex),
+      setIndex: Math.max(1, nextSetIndex),
+      restRemaining: Math.max(0, Number(nextRest ?? 0)),
+      restStatus: nextRest && nextRest > 0 ? (status === "PAUSED" ? "PAUSED" : "ACTIVE") : "IDLE",
+      restUpdatedAt: new Date().toISOString(),
+    });
     const body: Record<string, unknown> = {
       workoutSessionId: sessionId,
       currentExerciseIndex: Math.max(0, nextExerciseIndex),
@@ -365,6 +405,20 @@ export function GuidedWorkoutClient({
     targetWeightKg: number;
     currentExerciseIndex: number;
   }) => {
+    publishRealtimeState({
+      sessionId,
+      revision: `optimistic:${Date.now()}`,
+      optimistic: true,
+      action: "live-target",
+      status: "IN_PROGRESS",
+      exerciseIndex: Math.max(0, input.currentExerciseIndex),
+      setIndex: Math.max(1, input.setIndex),
+      targetReps: input.targetReps,
+      weight: input.targetWeightKg,
+      restRemaining: Math.max(0, restRemaining),
+      restStatus: restPaused ? "PAUSED" : restRemaining > 0 ? "ACTIVE" : "IDLE",
+      restUpdatedAt: new Date().toISOString(),
+    });
     if (liveTargetTimerRef.current != null) {
       window.clearTimeout(liveTargetTimerRef.current);
     }
@@ -388,7 +442,7 @@ export function GuidedWorkoutClient({
         if (data.state) publishRealtimeState(data.state);
       }).catch(() => undefined);
     }, 450);
-  }, [publishRealtimeState, sessionId]);
+  }, [publishRealtimeState, restPaused, restRemaining, sessionId]);
 
   const exercise = exercises[exerciseIndex];
   const isActiveWorkoutSurface = restRemaining <= 0;
@@ -406,6 +460,24 @@ export function GuidedWorkoutClient({
   const activeSet = setRows[Math.max(0, Math.min(nextSetIndex - 1, setRows.length - 1))];
   const activeSetIndex = activeSet?.setIndex ?? null;
   const activeKey = activeSetIndex != null ? `${exercise.id}:${activeSetIndex}` : "";
+
+  const publishOptimisticWorkoutState = useCallback((action: string, overrides: Partial<RealtimeWorkoutState> = {}) => {
+    publishRealtimeState({
+      sessionId,
+      revision: `optimistic:${Date.now()}`,
+      optimistic: true,
+      action,
+      status: "IN_PROGRESS",
+      exerciseIndex,
+      setIndex: Math.max(1, activeSetIndex ?? nextSetIndex),
+      targetReps: activeSet ? repsByKey[activeKey] ?? activeSet.plannedReps : null,
+      weight: activeSet ? weightByKey[activeKey] ?? exercise.plannedWeightKg ?? null : null,
+      restRemaining: Math.max(0, restRemaining),
+      restStatus: restPaused ? "PAUSED" : restRemaining > 0 ? "ACTIVE" : "IDLE",
+      restUpdatedAt: new Date().toISOString(),
+      ...overrides,
+    });
+  }, [activeKey, activeSet, activeSetIndex, exercise.plannedWeightKg, exerciseIndex, nextSetIndex, publishRealtimeState, repsByKey, restPaused, restRemaining, sessionId, weightByKey]);
 
   useEffect(() => {
     if (ending || summary || activeSetIndex == null || !activeKey) return;
@@ -567,7 +639,8 @@ export function GuidedWorkoutClient({
 
         if (!alive || !state || setValidationInFlightRef.current || restActionInFlightRef.current || pendingRestActionRef.current) return;
         const snapshotRevision = Date.parse(state.revision ?? "");
-        if (Number.isFinite(snapshotRevision) && snapshotRevision < latestRealtimeRevisionRef.current) return;
+        if (Date.now() < optimisticStateUntilRef.current) return;
+        if (Number.isFinite(snapshotRevision) && snapshotRevision <= latestRealtimeRevisionRef.current) return;
         if (Number.isFinite(snapshotRevision)) latestRealtimeRevisionRef.current = snapshotRevision;
         if (state.status === "COMPLETED") {
           clearRestTimer();
@@ -715,6 +788,16 @@ export function GuidedWorkoutClient({
 
     // Start locally so the rest screen never waits for the set persistence round trip.
     startRestTimer(validatedRestSeconds);
+    const isLastSetForExercise = setIndex >= setRows.length;
+    const optimisticExerciseIndex = isLastSetForExercise
+      ? Math.max(0, Math.min(exercises.length - 1, exerciseIndex + 1))
+      : exerciseIndex;
+    publishOptimisticWorkoutState("validate-set", {
+      exerciseIndex: optimisticExerciseIndex,
+      setIndex: isLastSetForExercise ? 1 : setIndex + 1,
+      restRemaining: validatedRestSeconds,
+      restStatus: validatedRestSeconds > 0 ? "ACTIVE" : "IDLE",
+    });
 
     try {
       const response = await fetch("/api/workout/log-set", {
@@ -751,10 +834,6 @@ export function GuidedWorkoutClient({
         const withoutSame = prev.filter((item) => !(item.exerciseId === saved.exerciseId && item.setIndex === saved.setIndex));
         return [...withoutSame, saved];
       });
-      const isLastSetForExercise = setIndex >= setRows.length;
-      const optimisticExerciseIndex = isLastSetForExercise
-        ? Math.max(0, Math.min(exercises.length - 1, exerciseIndex + 1))
-        : exerciseIndex;
       if (isLastSetForExercise && exerciseIndex < exercises.length - 1) {
         setExerciseIndex(optimisticExerciseIndex);
         setRestChoice(getPlannedRestForIndex(optimisticExerciseIndex));
@@ -851,6 +930,7 @@ export function GuidedWorkoutClient({
     skipRestRequestedRef.current = true;
     prevRestRemainingRef.current = 0;
     clearRestTimer();
+    publishOptimisticWorkoutState("skip-rest", { restRemaining: 0, restStatus: "IDLE" });
     lastSyncedWatchPositionRef.current = `${exerciseIndex}:${Math.max(1, nextSetIndex)}:0`;
     try {
       const response = await fetch("/api/watch/skip-rest", {
@@ -885,6 +965,10 @@ export function GuidedWorkoutClient({
       skipRestRequestedRef.current = true;
     }
     lastSyncedWatchPositionRef.current = `${exerciseIndex}:${Math.max(1, nextSetIndex)}:${optimisticRemaining}`;
+    publishOptimisticWorkoutState("adjust-rest", {
+      restRemaining: optimisticRemaining,
+      restStatus: optimisticRemaining <= 0 ? "IDLE" : restPaused ? "PAUSED" : "ACTIVE",
+    });
 
     try {
       const response = await fetch("/api/watch/adjust-rest", {
@@ -980,6 +1064,10 @@ export function GuidedWorkoutClient({
       setRestPaused(false);
       startRestTimer(restRemaining);
     }
+    publishOptimisticWorkoutState(action.operation === "pause" ? "pause-rest" : "resume-rest", {
+      restRemaining,
+      restStatus: action.operation === "pause" ? "PAUSED" : "ACTIVE",
+    });
     void submitRestPauseAction(action);
   }
 
@@ -1075,6 +1163,11 @@ export function GuidedWorkoutClient({
     setEnding(true);
     setCompletionError(null);
     setCanRepairCompletion(false);
+    publishOptimisticWorkoutState("complete-session", {
+      status: "COMPLETED",
+      restRemaining: 0,
+      restStatus: "IDLE",
+    });
     const response = await fetch("/api/workout/complete", {
       method: "POST",
       headers: { "content-type": "application/json" },

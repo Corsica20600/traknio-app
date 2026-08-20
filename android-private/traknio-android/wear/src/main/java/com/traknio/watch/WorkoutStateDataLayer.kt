@@ -15,6 +15,8 @@ import org.json.JSONObject
 data class WorkoutStateMessage(
     val sessionId: String,
     val revision: String,
+    val action: String? = null,
+    val optimistic: Boolean = false,
     val status: String,
     val exerciseIndex: Int,
     val setIndex: Int,
@@ -27,6 +29,8 @@ data class WorkoutStateMessage(
     fun toJson(): String = JSONObject()
         .put("sessionId", sessionId)
         .put("revision", revision)
+        .put("action", action)
+        .put("optimistic", optimistic)
         .put("status", status)
         .put("exerciseIndex", exerciseIndex)
         .put("setIndex", setIndex)
@@ -46,6 +50,8 @@ data class WorkoutStateMessage(
             WorkoutStateMessage(
                 sessionId = sessionId,
                 revision = revision,
+                action = value.optString("action").takeIf { it.isNotBlank() },
+                optimistic = value.optBoolean("optimistic", false) || revision.startsWith("optimistic:"),
                 status = value.optString("status", "IN_PROGRESS"),
                 exerciseIndex = value.optInt("exerciseIndex", 0).coerceAtLeast(0),
                 setIndex = value.optInt("setIndex", 1).coerceAtLeast(1),
@@ -71,10 +77,11 @@ object WatchWorkoutStateDataLayer {
     private const val TAG = "WORKOUT_STATE"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    fun publish(context: Context, payload: WatchPayload) {
+    fun publish(context: Context, payload: WatchPayload, action: String? = null) {
         val state = WorkoutStateMessage(
             sessionId = payload.sessionId,
             revision = payload.revision,
+            action = action,
             status = payload.status,
             exerciseIndex = (payload.exerciseIndex - 1).coerceAtLeast(0),
             setIndex = payload.setIndex,
@@ -91,17 +98,41 @@ object WatchWorkoutStateDataLayer {
         scope.launch {
             val nodes = runCatching { Wearable.getNodeClient(context.applicationContext).connectedNodes.await() }
                 .getOrElse { emptyList() }
+            Log.i(TAG, "workout_state_send action=${state.action ?: "confirmed"} revision=${state.revision.takeLast(24)} nodes=${nodes.size}")
             nodes.forEach { node ->
                 runCatching {
                     Wearable.getMessageClient(context.applicationContext)
                         .sendMessage(node.id, WearPairingPaths.WORKOUT_STATE, state.toJson().toByteArray())
                         .await()
-                }.onFailure { Log.w(TAG, "state delivery failed type=${it.javaClass.simpleName}") }
+                }.onSuccess {
+                    Log.i(TAG, "workout_state_send_delivered action=${state.action ?: "confirmed"} nodeFound=true")
+                }.onFailure { Log.w(TAG, "state delivery failed action=${state.action ?: "confirmed"} type=${it.javaClass.simpleName}") }
             }
         }
     }
 
+    fun publishOptimistic(context: Context, payload: WatchPayload, action: String) {
+        publish(
+            context,
+            WorkoutStateMessage(
+                sessionId = payload.sessionId,
+                revision = "optimistic:${System.currentTimeMillis()}",
+                action = action,
+                optimistic = true,
+                status = payload.status,
+                exerciseIndex = (payload.exerciseIndex - 1).coerceAtLeast(0),
+                setIndex = payload.setIndex,
+                targetReps = payload.targetReps,
+                weight = payload.activeWeight ?: payload.weight,
+                restRemaining = payload.restRemaining,
+                restStatus = payload.restStatus,
+                restUpdatedAt = payload.restUpdatedAt,
+            ),
+        )
+    }
+
     fun receive(context: Context, state: WorkoutStateMessage) {
+        Log.i(TAG, "workout_state_received action=${state.action ?: "confirmed"} revision=${state.revision.takeLast(24)} optimistic=${state.optimistic}")
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(KEY_LAST_STATE, state.toJson()).apply()
         WatchWorkoutStateEvents.emit(state)

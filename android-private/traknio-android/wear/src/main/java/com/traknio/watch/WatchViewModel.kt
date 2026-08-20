@@ -70,7 +70,10 @@ class WatchViewModel(context: Context) : ViewModel() {
         }
     }
 
-    fun validateSet(actualReps: Int, weight: Double?) = perform("validate") { payload ->
+    fun validateSet(actualReps: Int, weight: Double?) = perform(
+        "validate",
+        optimistic = ::advanceOptimisticSet,
+    ) { payload ->
         api.validateSet(payload, actualReps.coerceAtLeast(1), weight?.coerceAtLeast(0.0))
     }
 
@@ -94,7 +97,9 @@ class WatchViewModel(context: Context) : ViewModel() {
         if (ready.busyAction != null) return
         if (ready.displayRestRemaining <= 0) return
         if (ready.payload.restStatus == "PAUSED") {
-            perform("resume-rest") { payload -> api.resumeRest(payload.sessionId) }
+            perform("resume-rest", optimistic = {
+                updateOptimisticRest(ready.displayRestRemaining, paused = false)
+            }) { payload -> api.resumeRest(payload.sessionId) }
         } else {
             // The API owns pause state so the phone and watch cannot drift apart.
             perform("pause-rest", optimistic = {
@@ -112,11 +117,13 @@ class WatchViewModel(context: Context) : ViewModel() {
         api.removeRest(payload.sessionId, 15)
     }
 
-    fun nextExercise() = perform("next") { payload -> api.nextExercise(payload.sessionId) }
+    fun nextExercise() = perform("next", optimistic = { moveOptimisticExercise(1) }) { payload -> api.nextExercise(payload.sessionId) }
 
-    fun previousExercise() = perform("previous") { payload -> api.previousExercise(payload.sessionId) }
+    fun previousExercise() = perform("previous", optimistic = { moveOptimisticExercise(-1) }) { payload -> api.previousExercise(payload.sessionId) }
 
-    fun selectExercise(exerciseIndex: Int) = perform("select-exercise") { payload ->
+    fun selectExercise(exerciseIndex: Int) = perform("select-exercise", optimistic = {
+        selectOptimisticExercise(exerciseIndex)
+    }) { payload ->
         api.selectExercise(payload.sessionId, exerciseIndex)
     }
 
@@ -125,7 +132,7 @@ class WatchViewModel(context: Context) : ViewModel() {
         _state.value = ready.copy(finishConfirm = true)
     }
 
-    fun completeSession() = perform("finish") { payload -> api.completeSession(payload.sessionId) }
+    fun completeSession() = perform("finish", optimistic = ::completeOptimisticSession) { payload -> api.completeSession(payload.sessionId) }
 
     private fun startPolling() {
         pollingJob?.cancel()
@@ -196,13 +203,16 @@ class WatchViewModel(context: Context) : ViewModel() {
         if (mutatesRest) restMutationPending = true
         _state.value = ready.copy(busyAction = actionId, syncLabel = "Sync...", finishConfirm = false, error = null)
         optimistic?.invoke()
+        // Propagate the UI transition over the Data Layer before waiting for HTTPS.
+        // The server result below remains authoritative and will reconcile this snapshot.
+        (latestPayload ?: payload).let { WatchWorkoutStateDataLayer.publishOptimistic(appContext, it, actionId) }
 
         viewModelScope.launch {
             try {
                 ensurePaired()
                 val result = action(payload)
                 applyPayload(result, syncLabel = "Sync OK", confirmedRestMutation = mutatesRest)
-                WatchWorkoutStateDataLayer.publish(appContext, result)
+                WatchWorkoutStateDataLayer.publish(appContext, result, actionId)
             } catch (error: Throwable) {
                 if (error is WatchRelayQueuedException) {
                     val queued = _state.value as? WatchScreenState.Ready
@@ -317,7 +327,12 @@ class WatchViewModel(context: Context) : ViewModel() {
         super.onCleared()
     }
 
-    private fun applyPayload(incoming: WatchPayload, syncLabel: String, confirmedRestMutation: Boolean = false) {
+    private fun applyPayload(
+        incoming: WatchPayload,
+        syncLabel: String,
+        confirmedRestMutation: Boolean = false,
+        finalizeMetrics: Boolean = true,
+    ) {
         val currentPayload = latestPayload
         val incomingRevisionMs = revisionMillis(incoming.revision)
         if (currentPayload?.sessionId == incoming.sessionId && incomingRevisionMs < newestRevisionMs) return
@@ -350,7 +365,7 @@ class WatchViewModel(context: Context) : ViewModel() {
             }
         } else if (payload.status == "COMPLETED") {
             pollingJob?.cancel()
-            finalizeExerciseMetrics(payload.sessionId)
+            if (finalizeMetrics) finalizeExerciseMetrics(payload.sessionId)
         }
         val nextKey = "${payload.sessionId}:${payload.exerciseIndex}:${payload.setIndex}"
         val contextChanged = latestKey != nextKey
@@ -375,7 +390,15 @@ class WatchViewModel(context: Context) : ViewModel() {
 
     private fun applyRealtimeState(state: WorkoutStateMessage) {
         val current = latestPayload ?: return
-        if (state.sessionId != current.sessionId || revisionMillis(state.revision) < newestRevisionMs) return
+        if (state.sessionId != current.sessionId) {
+            Log.i(TAG, "workout_state_ignored reason=session action=${state.action ?: "confirmed"}")
+            return
+        }
+        val optimistic = state.optimistic || state.revision.startsWith("optimistic:")
+        if (!optimistic && revisionMillis(state.revision) < newestRevisionMs) {
+            Log.i(TAG, "workout_state_ignored reason=stale action=${state.action ?: "confirmed"}")
+            return
+        }
         val exerciseName = current.exercises.firstOrNull { it.index == state.exerciseIndex }?.name ?: current.exerciseName
         applyPayload(
             current.copy(
@@ -388,11 +411,14 @@ class WatchViewModel(context: Context) : ViewModel() {
                 restRemaining = state.restRemaining,
                 restStatus = state.restStatus,
                 restUpdatedAt = state.restUpdatedAt ?: current.restUpdatedAt,
-                revision = state.revision,
+                // A temporary client revision is intentionally never promoted to the
+                // authoritative revision watermark; a server confirmation must win later.
+                revision = if (optimistic) current.revision else state.revision,
                 status = state.status,
             ),
             syncLabel = "Synchronisé",
-            confirmedRestMutation = true,
+            confirmedRestMutation = !optimistic,
+            finalizeMetrics = !optimistic,
         )
     }
 
@@ -477,6 +503,51 @@ class WatchViewModel(context: Context) : ViewModel() {
         )
         latestPayload = updatedPayload
         _state.value = ready.copy(payload = updatedPayload)
+    }
+
+    private fun advanceOptimisticSet() {
+        val ready = _state.value as? WatchScreenState.Ready ?: return
+        val current = ready.payload
+        val nextExerciseIndex: Int
+        val nextSetIndex: Int
+        if (current.setIndex >= current.totalSets && current.exerciseIndex < current.totalExercises) {
+            nextExerciseIndex = current.exerciseIndex + 1
+            nextSetIndex = 1
+        } else {
+            nextExerciseIndex = current.exerciseIndex
+            nextSetIndex = (current.setIndex + 1).coerceAtMost(current.totalSets)
+        }
+        selectOptimisticExercise(nextExerciseIndex, nextSetIndex)
+    }
+
+    private fun moveOptimisticExercise(delta: Int) {
+        val current = latestPayload ?: return
+        selectOptimisticExercise((current.exerciseIndex + delta).coerceIn(1, current.totalExercises), 1)
+    }
+
+    private fun selectOptimisticExercise(exerciseIndex: Int, setIndex: Int = 1) {
+        val ready = _state.value as? WatchScreenState.Ready ?: return
+        val current = ready.payload
+        val normalizedIndex = exerciseIndex.coerceIn(1, current.totalExercises)
+        val name = current.exercises.firstOrNull { it.index == normalizedIndex - 1 }?.name ?: current.exerciseName
+        val updated = current.copy(
+            exerciseIndex = normalizedIndex,
+            exerciseName = name,
+            setIndex = setIndex.coerceAtLeast(1),
+            restRemaining = 0,
+            restStatus = "IDLE",
+        )
+        deadline = null
+        latestPayload = updated
+        _state.value = ready.copy(payload = updated, displayRestRemaining = 0, pausedRestRemaining = null)
+    }
+
+    private fun completeOptimisticSession() {
+        val ready = _state.value as? WatchScreenState.Ready ?: return
+        val updated = ready.payload.copy(status = "COMPLETED", restRemaining = 0, restStatus = "IDLE")
+        deadline = null
+        latestPayload = updated
+        _state.value = ready.copy(payload = updated, displayRestRemaining = 0, pausedRestRemaining = null)
     }
 
     private companion object {

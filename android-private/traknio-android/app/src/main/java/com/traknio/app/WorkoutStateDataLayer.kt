@@ -31,13 +31,19 @@ object WorkoutStateDataLayer {
                     Log.w(TAG, "nodes unavailable type=${it.javaClass.simpleName}")
                     emptyList()
                 }
+            val state = JSONObject(normalized)
+            val action = state.optString("action", "confirmed")
+            val revision = state.optString("revision").takeLast(24)
+            Log.i(TAG, "workout_state_send action=$action revision=$revision nodes=${nodes.size}")
             nodes.forEach { node ->
                 runCatching {
                     Wearable.getMessageClient(context.applicationContext)
                         .sendMessage(node.id, WearPairingPaths.WORKOUT_STATE, normalized.toByteArray())
                         .await()
+                }.onSuccess {
+                    Log.i(TAG, "workout_state_send_delivered action=$action nodeFound=true")
                 }.onFailure {
-                    Log.w(TAG, "state delivery failed type=${it.javaClass.simpleName}")
+                    Log.w(TAG, "state delivery failed action=$action type=${it.javaClass.simpleName}")
                 }
             }
         }
@@ -45,6 +51,11 @@ object WorkoutStateDataLayer {
 
     fun receiveFromWatch(context: Context, stateJson: String) {
         val normalized = normalize(stateJson) ?: return
+        val state = JSONObject(normalized)
+        Log.i(
+            TAG,
+            "workout_state_received action=${state.optString("action", "confirmed")} revision=${state.optString("revision").takeLast(24)} optimistic=${state.optBoolean("optimistic", false)}",
+        )
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(KEY_LAST_STATE, normalized).apply()
         context.applicationContext.sendBroadcast(
