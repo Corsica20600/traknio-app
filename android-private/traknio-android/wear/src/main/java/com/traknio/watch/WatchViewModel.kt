@@ -525,15 +525,24 @@ class WatchViewModel(context: Context) : ViewModel() {
         selectOptimisticExercise((current.exerciseIndex + delta).coerceIn(1, current.totalExercises), 1)
     }
 
-    private fun selectOptimisticExercise(exerciseIndex: Int, setIndex: Int = 1) {
+    private fun selectOptimisticExercise(exerciseIndex: Int, setIndex: Int? = null) {
         val ready = _state.value as? WatchScreenState.Ready ?: return
         val current = ready.payload
         val normalizedIndex = exerciseIndex.coerceIn(1, current.totalExercises)
-        val name = current.exercises.firstOrNull { it.index == normalizedIndex - 1 }?.name ?: current.exerciseName
+        val selectedExercise = current.exercises.firstOrNull { it.index == normalizedIndex - 1 }
+        val selectedTotalSets = selectedExercise?.totalSets ?: current.totalSets
+        val selectedSetIndex = (setIndex ?: selectedExercise?.activeSetIndex ?: 1)
+            .coerceIn(1, selectedTotalSets.coerceAtLeast(1))
         val updated = current.copy(
             exerciseIndex = normalizedIndex,
-            exerciseName = name,
-            setIndex = setIndex.coerceAtLeast(1),
+            exerciseName = selectedExercise?.name ?: current.exerciseName,
+            totalSets = selectedTotalSets,
+            setIndex = selectedSetIndex,
+            targetReps = selectedExercise?.targetReps ?: current.targetReps,
+            weight = if (selectedExercise != null) selectedExercise.weight else current.weight,
+            activeWeight = if (selectedExercise != null) selectedExercise.weight else current.activeWeight,
+            proposedWeight = null,
+            weightConfirmationRequired = false,
             restRemaining = 0,
             restStatus = "IDLE",
         )

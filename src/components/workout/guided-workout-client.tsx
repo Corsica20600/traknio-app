@@ -308,7 +308,7 @@ export function GuidedWorkoutClient({
     // completed sets locally before deriving activeSet below; otherwise the
     // phone keeps rendering the previous set while its target values are
     // written under the new set key.
-    if (state.action === "validate-set") {
+    if (state.action === "validate" || state.action === "validate-set") {
       const previousExerciseIndex = Math.max(0, Math.min(exercises.length - 1, exerciseIndex));
       const completedExerciseIndex = nextExerciseIndex === previousExerciseIndex
         ? nextExerciseIndex
