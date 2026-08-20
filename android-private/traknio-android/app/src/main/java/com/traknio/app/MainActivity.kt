@@ -98,10 +98,18 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
 
-        val authCallbackUrl = getAuthCallbackUrl(intent) ?: return
-        // Do not log the URL: it contains OAuth state and authorization parameters.
-        Log.i("TraknioAuth", "OAuth callback received; completing it in the WebView")
-        binding.webViewTraknio.loadUrl(authCallbackUrl)
+        getAuthCallbackUrl(intent)?.let { authCallbackUrl ->
+            // Do not log the URL: it contains OAuth state and authorization parameters.
+            Log.i("TraknioAuth", "OAuth callback received; completing it in the WebView")
+            binding.webViewTraknio.loadUrl(authCallbackUrl)
+            return
+        }
+
+        // SyncHealthActivity reuses this singleTop Activity to open Settings. Handle
+        // that new intent explicitly instead of merely resuming the existing WebView.
+        if (!intent.getStringExtra(EXTRA_INITIAL_PATH).isNullOrBlank()) {
+            binding.webViewTraknio.loadUrl(buildInitialUrl())
+        }
     }
 
     private fun applyDarkSystemBars() {
