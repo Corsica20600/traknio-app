@@ -174,6 +174,29 @@ async function resolveSession(sessionId?: string, userProfileId?: string, db: Wa
   });
 }
 
+export async function getLatestWeightByExercise(
+  userProfileId: string,
+  exerciseIds: string[],
+  db: WatchDatabase = prisma,
+) {
+  const uniqueExerciseIds = [...new Set(exerciseIds.filter(Boolean))];
+  if (uniqueExerciseIds.length === 0) return new Map<string, number>();
+
+  const rows = await db.$queryRaw<Array<{ exerciseId: string; actualWeightKg: number }>>(Prisma.sql`
+    SELECT DISTINCT ON (sets."exerciseId")
+      sets."exerciseId",
+      sets."actualWeightKg"
+    FROM "WorkoutSet" AS sets
+    INNER JOIN "WorkoutSession" AS sessions ON sessions.id = sets."workoutSessionId"
+    WHERE sessions."userProfileId" = ${userProfileId}
+      AND sets."exerciseId" IN (${Prisma.join(uniqueExerciseIds)})
+      AND sets."actualWeightKg" > 0
+    ORDER BY sets."exerciseId", sets."createdAt" DESC
+  `);
+
+  return new Map(rows.map((row) => [row.exerciseId, row.actualWeightKg]));
+}
+
 async function getOrderedExercisesForSession(session: {
   id: string;
   userProfileId: string;
@@ -182,22 +205,6 @@ async function getOrderedExercisesForSession(session: {
   notes: string | null;
   sets: Array<{ exerciseId: string; exercise: { id: string; slug: string; name: string; nameFr: string | null; equipment: string[]; equipmentFr: string[] } }>;
 }, db: WatchDatabase) {
-  const latestWeightsRows = await db.workoutSet.findMany({
-    where: {
-      workoutSession: { userProfileId: session.userProfileId },
-      actualWeightKg: { gt: 0 },
-    },
-    orderBy: [{ createdAt: "desc" }],
-    select: { exerciseId: true, actualWeightKg: true },
-    take: 500,
-  });
-  const latestWeightByExercise = new Map<string, number>();
-  for (const row of latestWeightsRows) {
-    if (!latestWeightByExercise.has(row.exerciseId) && row.actualWeightKg != null) {
-      latestWeightByExercise.set(row.exerciseId, row.actualWeightKg);
-    }
-  }
-
   if (session.programId) {
     const program = await db.program.findUnique({
       where: { id: session.programId },
@@ -226,6 +233,8 @@ async function getOrderedExercisesForSession(session: {
       if (dayForToday) {
         const replacements = getSessionExerciseReplacements(session.notes);
         const replacementExercises = await resolveReplacementExercises(session.notes);
+        const exerciseIds = dayForToday.exercises.map((item) => replacements[item.id]?.exerciseId ?? item.exerciseId);
+        const latestWeightByExercise = await getLatestWeightByExercise(session.userProfileId, exerciseIds, db);
         const fromProgramDay = dayForToday.exercises.map((item) => {
           const effectiveExerciseId = replacements[item.id]?.exerciseId ?? item.exerciseId;
           const effectiveExercise = replacementExercises.get(effectiveExerciseId) ?? item.exercise;
@@ -247,6 +256,11 @@ async function getOrderedExercisesForSession(session: {
   }
 
   const distinctFromSets = new Map<string, OrderedExercise>();
+  const latestWeightByExercise = await getLatestWeightByExercise(
+    session.userProfileId,
+    session.sets.map((set) => set.exerciseId),
+    db,
+  );
   for (const set of session.sets) {
     if (!distinctFromSets.has(set.exerciseId)) {
       distinctFromSets.set(set.exerciseId, {
@@ -270,6 +284,7 @@ async function getOrderedExercisesForSession(session: {
     orderBy: [{ category: "asc" }, { name: "asc" }],
     take: 6,
   });
+  const fallbackWeights = await getLatestWeightByExercise(session.userProfileId, fallback.map((item) => item.id), db);
   return fallback.map((item) => ({
     exerciseId: item.id,
     programExerciseId: null,
@@ -277,7 +292,7 @@ async function getOrderedExercisesForSession(session: {
     totalSets: 3,
     targetReps: DEFAULT_REPS[0],
     restSeconds: 90,
-    plannedWeightKg: latestWeightByExercise.get(item.id) ?? null,
+    plannedWeightKg: fallbackWeights.get(item.id) ?? null,
     equipment: item.equipment,
     equipmentFr: item.equipmentFr,
   }));
@@ -290,12 +305,11 @@ function isBodyweightExercise(exercise: Pick<OrderedExercise, "equipment" | "equ
   return equipment.length > 0 && equipment.every((item) => ["poids du corps", "bodyweight", "body only", "aucun", "none"].includes(item));
 }
 
-/** Full snapshot for bootstrap and user-initiated actions, never for polling. */
-export async function getWatchBootstrapPayload(sessionId?: string, userProfileId?: string, db: WatchDatabase = prisma): Promise<WatchPayload | null> {
-  const session = await resolveSession(sessionId, userProfileId, db);
-  if (!session) return null;
-
-  const ordered = await getOrderedExercisesForSession(session, db);
+async function buildWatchBootstrapPayload(
+  session: NonNullable<Awaited<ReturnType<typeof resolveSession>>>,
+  ordered: OrderedExercise[],
+  db: WatchDatabase,
+): Promise<WatchPayload> {
   const totalExercises = Math.max(1, ordered.length);
   const exerciseIndexRaw = session.watchSession?.currentExerciseIndex ?? 0;
   const exerciseIndex = Math.max(0, Math.min(totalExercises - 1, exerciseIndexRaw));
@@ -366,6 +380,25 @@ export async function getWatchBootstrapPayload(sessionId?: string, userProfileId
     summary: await getWatchSessionSummary(session, db),
     exercises,
   };
+}
+
+/** Full snapshot for bootstrap and user-initiated actions, never for polling. */
+export async function getWatchBootstrapPayload(
+  sessionId?: string,
+  userProfileId?: string,
+  db: WatchDatabase = prisma,
+  ordered?: OrderedExercise[],
+): Promise<WatchPayload | null> {
+  const session = await resolveSession(sessionId, userProfileId, db);
+  if (!session) return null;
+  return buildWatchBootstrapPayload(session, ordered ?? await getOrderedExercisesForSession(session, db), db);
+}
+
+async function getWatchBootstrapContext(sessionId: string, userProfileId: string | undefined, db: WatchDatabase) {
+  const session = await resolveSession(sessionId, userProfileId, db);
+  if (!session) return null;
+  const ordered = await getOrderedExercisesForSession(session, db);
+  return { session, ordered, payload: await buildWatchBootstrapPayload(session, ordered, db) };
 }
 
 /** Bounded state snapshot for high-frequency fallback polling. */
@@ -463,7 +496,7 @@ export async function selectWatchExercise(sessionId: string, exerciseIndex: numb
     update: { currentExerciseIndex: index, currentSetIndex: Math.min(ordered[index].totalSets, Math.max(1, completedSets + 1)), status: "ACTIVE", lastSyncAt: new Date() },
     create: { workoutSessionId: session.id, currentExerciseIndex: index, currentSetIndex: Math.min(ordered[index].totalSets, Math.max(1, completedSets + 1)), status: "ACTIVE", lastSyncAt: new Date() },
   });
-  return getWatchBootstrapPayload(session.id, userProfileId, db);
+  return getWatchBootstrapPayload(session.id, userProfileId, db, ordered);
 }
 
 export async function validateWatchSet(input: {
@@ -575,7 +608,7 @@ export async function validateWatchSet(input: {
         lastSyncAt: new Date(),
       },
     });
-    const final = await getWatchBootstrapPayload(session.id, input.userProfileId, db);
+    const final = await getWatchBootstrapPayload(session.id, input.userProfileId, db, ordered);
     return final ? { ...final, status: "COMPLETED", restRemaining: 0 } : null;
   }
 
@@ -605,7 +638,7 @@ export async function validateWatchSet(input: {
     },
   });
 
-  return getWatchBootstrapPayload(session.id, input.userProfileId, db);
+  return getWatchBootstrapPayload(session.id, input.userProfileId, db, ordered);
 }
 
 export async function updateWatchLiveTarget(input: {
@@ -653,7 +686,7 @@ export async function updateWatchLiveTarget(input: {
     update: { currentExerciseIndex: exerciseIndex, currentSetIndex: setIndex, status: "ACTIVE", lastSyncAt: new Date() },
     create: { workoutSessionId: session.id, currentExerciseIndex: exerciseIndex, currentSetIndex: setIndex, status: "ACTIVE", lastSyncAt: new Date() },
   });
-  return getWatchBootstrapPayload(session.id, input.userProfileId, db);
+  return getWatchBootstrapPayload(session.id, input.userProfileId, db, ordered);
 }
 
 export async function nextWatchExercise(sessionId: string, userProfileId?: string, db: WatchDatabase = prisma) {
@@ -713,18 +746,20 @@ export async function previousWatchExercise(sessionId: string, userProfileId?: s
 }
 
 export async function skipWatchRest(sessionId: string, userProfileId?: string, db: WatchDatabase = prisma) {
-  const state = await getWatchBootstrapPayload(sessionId, userProfileId, db);
-  if (!state) return null;
+  const context = await getWatchBootstrapContext(sessionId, userProfileId, db);
+  if (!context) return null;
+  const state = context.payload;
   await db.watchSession.updateMany({
     where: { workoutSessionId: state.sessionId },
     data: { restStatus: "IDLE", restRemainingSeconds: 0, restUpdatedAt: new Date(), lastSyncAt: new Date() },
   });
-  return getWatchBootstrapPayload(state.sessionId, userProfileId, db);
+  return getWatchBootstrapPayload(state.sessionId, userProfileId, db, context.ordered);
 }
 
 export async function adjustWatchRest(sessionId: string, deltaSeconds: number, userProfileId?: string, db: WatchDatabase = prisma) {
-  const state = await getWatchBootstrapPayload(sessionId, userProfileId, db);
-  if (!state) return null;
+  const context = await getWatchBootstrapContext(sessionId, userProfileId, db);
+  if (!context) return null;
+  const state = context.payload;
   const nextRest = clampRestSeconds(state.restRemaining + Math.trunc(deltaSeconds));
   const nextStatus = nextRest <= 0 ? "IDLE" : state.restStatus === "PAUSED" ? "PAUSED" : "ACTIVE";
   await db.watchSession.updateMany({
@@ -732,7 +767,7 @@ export async function adjustWatchRest(sessionId: string, deltaSeconds: number, u
     data: { restStatus: nextStatus, restRemainingSeconds: nextRest, restUpdatedAt: new Date(), lastSyncAt: new Date() },
   });
 
-  return getWatchBootstrapPayload(state.sessionId, userProfileId, db);
+  return getWatchBootstrapPayload(state.sessionId, userProfileId, db, context.ordered);
 }
 
 export async function pauseWatchRest(sessionId: string, userProfileId?: string, db: WatchDatabase = prisma) {
