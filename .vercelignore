@@ -1,0 +1,20 @@
+# Local dependencies and build output must be created by Vercel's Linux builder.
+node_modules/
+.next/
+coverage/
+
+# Native Android sources and generated artifacts are not part of the web deployment.
+android-private/
+wear-os/
+**/build/
+*.apk
+*.aab
+*.apks
+
+# Local-only material and secrets.
+.env
+.env.*
+.vercel/
+documents/
+.idea/
+.gradle/
