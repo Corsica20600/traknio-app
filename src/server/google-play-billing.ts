@@ -143,6 +143,36 @@ export async function verifyGooglePlaySubscription(input: {
   });
 
   if (!response.ok) {
+    let errorStatus: string | null = null;
+    let errorMessage: string | null = null;
+    let reasons: string[] = [];
+
+    try {
+      const body = (await response.json()) as {
+        error?: {
+          status?: unknown;
+          message?: unknown;
+          errors?: Array<{ reason?: unknown }>;
+        };
+      };
+      const error = body.error;
+      errorStatus = typeof error?.status === "string" ? error.status : null;
+      errorMessage = typeof error?.message === "string" ? error.message : null;
+      reasons = Array.isArray(error?.errors)
+        ? error.errors
+          .map((entry) => entry.reason)
+          .filter((reason): reason is string => typeof reason === "string")
+        : [];
+    } catch {
+      // The status code remains useful even if Google returns a non-JSON body.
+    }
+
+    console.error("[GOOGLE_PLAY_SUBSCRIPTION_ERROR]", {
+      httpStatus: response.status,
+      errorStatus,
+      errorMessage,
+      reasons,
+    });
     throw new Error(`GOOGLE_PLAY_SUBSCRIPTION_ERROR_${response.status}`);
   }
 

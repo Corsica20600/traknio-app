@@ -5,7 +5,7 @@
 - App Android: Traknio
 - Package actuel: `com.traknio.app`
 - Produit abonnement: `traknio_premium`
-- Base plan mensuel: `monthly_499`
+- Base plan mensuel: `monthly`
 - Prix cible: `4,99 EUR / mois`
 - Piste de test recommandee: test interne, puis test ferme.
 
