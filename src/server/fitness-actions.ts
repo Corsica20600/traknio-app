@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { prisma } from "@/src/lib/prisma";
 import { getOrCreateDemoProfile } from "@/src/server/fitness-queries";
 import { markOnboardingStepForProfile } from "@/src/server/onboarding-actions";
@@ -36,6 +37,14 @@ export async function createSimpleProgramAction(formData: FormData) {
 
 export async function startWorkoutSessionAction(formData: FormData) {
   const profile = await getOrCreateDemoProfile();
+  const activeSession = await prisma.workoutSession.findFirst({
+    where: { userProfileId: profile.id, status: "IN_PROGRESS" },
+    select: { id: true },
+  });
+  // A stale page or a double form submission must resume the current workout,
+  // never create a parallel IN_PROGRESS session with a competing Watch state.
+  if (activeSession) redirect("/workout");
+
   const programIdRaw = String(formData.get("programId") ?? "").trim();
   const programDayIdRaw = String(formData.get("programDayId") ?? "").trim();
   const title = String(formData.get("title") ?? "Seance libre").trim();

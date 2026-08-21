@@ -1,4 +1,5 @@
 import { auth, LEGACY_DEMO_EMAIL, PRIMARY_USER_EMAIL } from "@/auth";
+import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { prisma } from "@/src/lib/prisma";
 import { getExerciseDisplayName } from "@/src/lib/exercise-overrides";
@@ -83,6 +84,28 @@ function parseWeightKgFromText(value: string | null | undefined): number | null 
   if (!match) return null;
   const parsed = Number(match[1].replace(",", "."));
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+async function getLatestWeightByExerciseForWorkout(
+  userProfileId: string,
+  exerciseIds: string[],
+) {
+  const uniqueExerciseIds = [...new Set(exerciseIds.filter(Boolean))];
+  if (uniqueExerciseIds.length === 0) return new Map<string, number>();
+
+  const rows = await prisma.$queryRaw<Array<{ exerciseId: string; actualWeightKg: number }>>(Prisma.sql`
+    SELECT DISTINCT ON (sets."exerciseId")
+      sets."exerciseId",
+      sets."actualWeightKg"
+    FROM "WorkoutSet" AS sets
+    INNER JOIN "WorkoutSession" AS sessions ON sessions.id = sets."workoutSessionId"
+    WHERE sessions."userProfileId" = ${userProfileId}
+      AND sets."exerciseId" IN (${Prisma.join(uniqueExerciseIds)})
+      AND sets."actualWeightKg" > 0
+    ORDER BY sets."exerciseId", sets."createdAt" DESC
+  `);
+
+  return new Map(rows.map((row) => [row.exerciseId, row.actualWeightKg]));
 }
 
 function isMissingColumnError(error: unknown) {
@@ -997,10 +1020,33 @@ export async function getWorkoutPageData() {
       where: { userProfileId: profile.id, status: { in: ["ACTIVE", "DRAFT"] } },
       orderBy: { createdAt: "desc" },
       take: 10,
+      select: { id: true, name: true, status: true },
     }),
     prisma.workoutSession.findFirst({
       where: { userProfileId: profile.id, status: "IN_PROGRESS" },
-      include: { sets: { orderBy: { createdAt: "desc" }, take: 20 }, program: true },
+      select: {
+        id: true,
+        programId: true,
+        programDayId: true,
+        title: true,
+        notes: true,
+        startedAt: true,
+        createdAt: true,
+        program: { select: { name: true } },
+        sets: {
+          orderBy: { createdAt: "desc" },
+          take: 20,
+          select: {
+            id: true,
+            exerciseId: true,
+            setIndex: true,
+            targetRepsMin: true,
+            actualReps: true,
+            actualWeightKg: true,
+            createdAt: true,
+          },
+        },
+      },
       orderBy: { createdAt: "desc" },
     }),
     prisma.workoutSession.findFirst({
@@ -1011,90 +1057,75 @@ export async function getWorkoutPageData() {
   ]);
   const lastPerformedProgramId = latestProgramSession?.programId ?? null;
 
-  try {
-    exercises = await prisma.exercise.findMany({
-      where: { isActive: true },
-      include: { media: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }] } },
-      orderBy: [{ category: "asc" }, { name: "asc" }],
-      take: 120,
-    }) as ExerciseWithFrCompat[];
-  } catch (error) {
-    if (!isMissingColumnError(error)) throw error;
-    const fallbackExercises = await prisma.exercise.findMany({
-      where: { isActive: true },
-      include: { media: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }] } },
-      orderBy: [{ category: "asc" }, { name: "asc" }],
-      take: 120,
-    });
-    exercises = fallbackExercises.map((item) => toFrCompat(item)) as ExerciseWithFrCompat[];
-  }
-
   let sessionExercises: SessionWorkoutExercise[] = [];
-  const latestWeightsRows = await prisma.workoutSet.findMany({
-    where: {
-      workoutSession: { userProfileId: profile.id },
-      actualWeightKg: { not: null },
-    },
-    orderBy: [{ createdAt: "desc" }],
-    select: { exerciseId: true, actualWeightKg: true },
-    take: 500,
-  });
-  const latestWeightByExercise = new Map<string, number>();
-  for (const row of latestWeightsRows) {
-    if (!latestWeightByExercise.has(row.exerciseId) && row.actualWeightKg != null) {
-      latestWeightByExercise.set(row.exerciseId, row.actualWeightKg);
-    }
-  }
-
   if (currentSession?.programId) {
-    const sessionProgram = await prisma.program.findFirst({
-      where: { id: currentSession.programId, userProfileId: profile.id },
-      include: {
-        days: {
+    const dayForToday = currentSession.programDayId
+      ? await prisma.programDay.findFirst({
+          where: { id: currentSession.programDayId, programId: currentSession.programId },
+          include: {
+            exercises: {
+              orderBy: { orderIndex: "asc" },
+              include: { exercise: { include: { media: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }] } } } },
+            },
+          },
+        })
+      : await prisma.programDay.findFirst({
+          where: { programId: currentSession.programId },
           orderBy: { dayIndex: "asc" },
           include: {
             exercises: {
               orderBy: { orderIndex: "asc" },
-              include: {
-                exercise: {
-                  include: { media: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }] } },
-                },
-              },
+              include: { exercise: { include: { media: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }] } } } },
             },
           },
+        });
+
+    if (dayForToday) {
+      const replacements = getSessionExerciseReplacements(currentSession.notes);
+      const replacementExercises = await resolveReplacementExercises(currentSession.notes);
+      const latestWeightByExercise = await getLatestWeightByExerciseForWorkout(
+        profile.id,
+        dayForToday.exercises.map((item) => replacements[item.id]?.exerciseId ?? item.exerciseId),
+      );
+      sessionExercises = dayForToday.exercises.map((programExercise) => ({
+        ...(toFrCompat(replacementExercises.get(replacements[programExercise.id]?.exerciseId ?? "") ?? programExercise.exercise) as ExerciseWithFrCompat),
+        plan: {
+          sets: programExercise.sets ?? null,
+          repsMin: programExercise.repsMin ?? null,
+          repsMax: programExercise.repsMax ?? null,
+          plannedWeightKg:
+            parseWeightKgFromText(programExercise.repsText) ??
+            latestWeightByExercise.get(replacements[programExercise.id]?.exerciseId ?? programExercise.exerciseId) ??
+            null,
+          restSeconds: programExercise.restSeconds ?? null,
+          orderDayIndex: dayForToday.dayIndex,
+          orderExerciseIndex: programExercise.orderIndex,
+          programExerciseId: programExercise.id,
         },
-      },
-    });
-
-    if (sessionProgram) {
-      const dayForToday = currentSession.programDayId
-        ? (sessionProgram.days.find((day) => day.id === currentSession.programDayId) ?? sessionProgram.days[0] ?? null)
-        : (sessionProgram.days[0] ?? null);
-
-      if (dayForToday) {
-        const replacements = getSessionExerciseReplacements(currentSession.notes);
-        const replacementExercises = await resolveReplacementExercises(currentSession.notes);
-        sessionExercises = dayForToday.exercises.map((programExercise) => ({
-          ...(toFrCompat(replacementExercises.get(replacements[programExercise.id]?.exerciseId ?? "") ?? programExercise.exercise) as ExerciseWithFrCompat),
-          plan: {
-            sets: programExercise.sets ?? null,
-            repsMin: programExercise.repsMin ?? null,
-            repsMax: programExercise.repsMax ?? null,
-            plannedWeightKg:
-              parseWeightKgFromText(programExercise.repsText) ??
-              latestWeightByExercise.get(replacements[programExercise.id]?.exerciseId ?? programExercise.exerciseId) ??
-              null,
-            restSeconds: programExercise.restSeconds ?? null,
-            orderDayIndex: dayForToday.dayIndex,
-            orderExerciseIndex: programExercise.orderIndex,
-            programExerciseId: programExercise.id,
-          },
-        }));
-      }
+      }));
     }
   }
 
   if (sessionExercises.length === 0) {
+    // The catalogue is only required for a free workout or a recovery from an
+    // invalid/empty session. An active program already provides its exercises.
+    try {
+      exercises = await prisma.exercise.findMany({
+        where: { isActive: true },
+        include: { media: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }] } },
+        orderBy: [{ category: "asc" }, { name: "asc" }],
+        take: 120,
+      }) as ExerciseWithFrCompat[];
+    } catch (error) {
+      if (!isMissingColumnError(error)) throw error;
+      const fallbackExercises = await prisma.exercise.findMany({
+        where: { isActive: true },
+        include: { media: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }] } },
+        orderBy: [{ category: "asc" }, { name: "asc" }],
+        take: 120,
+      });
+      exercises = fallbackExercises.map((item) => toFrCompat(item)) as ExerciseWithFrCompat[];
+    }
     const shuffled = [...exercises].sort(() => Math.random() - 0.5);
     sessionExercises = shuffled.slice(0, 6).map((exercise) => ({ ...exercise, plan: undefined }));
   }

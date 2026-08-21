@@ -792,9 +792,12 @@ export function GuidedWorkoutClient({
     const interval = window.setInterval(() => {
       if (document.visibilityState === "visible") void pullWatchState();
     }, 15_000);
+    // Returning to the app only needs the bounded state reconciliation above.
+    // Refreshing the Server Component here reloads the full workout catalogue,
+    // media and history even though the Data Layer and this endpoint already
+    // provide the current live state.
     const pullFreshState = () => {
       void pullWatchState();
-      router.refresh();
     };
     const onVisibleAgain = () => {
       if (document.visibilityState === "visible") pullFreshState();
