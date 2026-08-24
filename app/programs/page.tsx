@@ -17,6 +17,7 @@ import {
   createSimpleProgramAction,
   deleteProgramAction,
   renameProgramDayAction,
+  setProgramStatusAction,
 } from "@/src/server/fitness-actions";
 import { getExerciseOptionsForPrograms, getProgramsForDemoUser } from "@/src/server/fitness-queries";
 import { getOnboardingSnapshot } from "@/src/server/onboarding-actions";
@@ -150,6 +151,13 @@ export default async function ProgramsPage() {
               equipment={uniqueProgramEquipment(program)}
               actions={
                 <div className="program-card-actions-compact">
+                  {program.status === "DRAFT" ? (
+                    <form action={setProgramStatusAction}>
+                      <input type="hidden" name="programId" value={program.id} />
+                      <input type="hidden" name="status" value="ACTIVE" />
+                      <button className="ghost-btn chip" type="submit">Activer</button>
+                    </form>
+                  ) : null}
                   <a className="ghost-btn chip" href={`#program-edit-${program.id}`}>
                     Modifier
                   </a>
