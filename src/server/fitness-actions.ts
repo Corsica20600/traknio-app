@@ -368,10 +368,26 @@ export async function setProgramStatusAction(formData: FormData) {
   });
   if (!program) return;
 
-  await prisma.program.update({
-    where: { id: programId },
-    data: { status: nextStatus as "DRAFT" | "ACTIVE" | "ARCHIVED" },
-  });
+  if (nextStatus === "ACTIVE") {
+    // A profile has one default training program. Switching it must not leave
+    // several programs marked ACTIVE, otherwise the dashboard selection is
+    // ambiguous.
+    await prisma.$transaction([
+      prisma.program.updateMany({
+        where: { userProfileId: profile.id, status: "ACTIVE", id: { not: programId } },
+        data: { status: "DRAFT" },
+      }),
+      prisma.program.update({
+        where: { id: programId },
+        data: { status: "ACTIVE" },
+      }),
+    ]);
+  } else {
+    await prisma.program.update({
+      where: { id: programId },
+      data: { status: nextStatus as "DRAFT" | "ARCHIVED" },
+    });
+  }
 
   revalidatePath("/programs");
 }
