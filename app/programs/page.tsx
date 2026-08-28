@@ -45,7 +45,7 @@ function goalToFr(goal: string) {
 
 function statusToFr(status: string) {
   const map: Record<string, string> = {
-    DRAFT: "Brouillon",
+    DRAFT: "Enregistré",
     ACTIVE: "Actif",
     ARCHIVED: "Archive",
   };
