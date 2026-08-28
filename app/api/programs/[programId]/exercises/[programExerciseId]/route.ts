@@ -87,12 +87,45 @@ export async function DELETE(_request: Request, context: ProgramExerciseContext)
       return NextResponse.json({ error: "Paramètres invalides." }, { status: 400 });
     }
 
-    const exists = await findOwnedProgramExercise(programId, programExerciseId, profile.id);
+    const exists = await prisma.programExercise.findFirst({
+      where: {
+        id: programExerciseId,
+        programDay: {
+          programId,
+          program: { userProfileId: profile.id },
+        },
+      },
+      select: { id: true, programDayId: true },
+    });
     if (!exists) {
       return NextResponse.json({ error: "Exercice du programme introuvable." }, { status: 404 });
     }
 
-    await prisma.programExercise.delete({ where: { id: programExerciseId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.programExercise.delete({ where: { id: programExerciseId } });
+
+      const remainingExercises = await tx.programExercise.findMany({
+        where: { programDayId: exists.programDayId },
+        orderBy: { orderIndex: "asc" },
+        select: { id: true, orderIndex: true },
+      });
+      const needsNormalization = remainingExercises.some((exercise, index) => exercise.orderIndex !== index + 1);
+      if (!needsNormalization) return;
+
+      const maxOrderIndex = remainingExercises.reduce((max, exercise) => Math.max(max, exercise.orderIndex), 0);
+      for (const [index, exercise] of remainingExercises.entries()) {
+        await tx.programExercise.update({
+          where: { id: exercise.id },
+          data: { orderIndex: maxOrderIndex + index + 1 },
+        });
+      }
+      for (const [index, exercise] of remainingExercises.entries()) {
+        await tx.programExercise.update({
+          where: { id: exercise.id },
+          data: { orderIndex: index + 1 },
+        });
+      }
+    });
     return NextResponse.json({ ok: true, programExerciseId });
   } catch {
     return NextResponse.json({ error: "Erreur serveur lors de la suppression." }, { status: 500 });

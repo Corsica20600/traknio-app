@@ -36,13 +36,15 @@ export async function PATCH(
     return NextResponse.json({ ok: false, error: "exercise_not_found" }, { status: 404 });
   }
 
-  const sibling = await prisma.programExercise.findFirst({
-    where: {
-      programDayId: current.programDayId,
-      orderIndex: direction === "up" ? current.orderIndex - 1 : current.orderIndex + 1,
-    },
+  // Positions can contain gaps after an exercise has been deleted. Resolve the
+  // neighbour from the actual ordered list instead of assuming index +/- 1.
+  const orderedExercises = await prisma.programExercise.findMany({
+    where: { programDayId: current.programDayId },
+    orderBy: { orderIndex: "asc" },
     select: { id: true, orderIndex: true },
   });
+  const currentListIndex = orderedExercises.findIndex((item) => item.id === current.id);
+  const sibling = orderedExercises[currentListIndex + (direction === "up" ? -1 : 1)] ?? null;
   if (!sibling) {
     const unchanged = await prisma.programExercise.findMany({
       where: { programDayId: current.programDayId },
