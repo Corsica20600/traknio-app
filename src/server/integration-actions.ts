@@ -42,7 +42,7 @@ export async function enableHealthConnectPreparationAction() {
     where: { userProfileId_provider: { userProfileId: profile.id, provider: "HEALTH_CONNECT" } },
     update: {
       status: "PENDING",
-      scopes: ["ExerciseSession", "HeartRate", "Sleep", "Steps", "TotalCaloriesBurned", "Distance"],
+      scopes: ["ExerciseSession", "HeartRate", "Sleep", "TotalCaloriesBurned", "Distance"],
       metadata: {
         source: "settings",
         mode: "android_runtime_permissions_required",
@@ -53,7 +53,7 @@ export async function enableHealthConnectPreparationAction() {
       userProfileId: profile.id,
       provider: "HEALTH_CONNECT",
       status: "PENDING",
-      scopes: ["ExerciseSession", "HeartRate", "Sleep", "Steps", "TotalCaloriesBurned", "Distance"],
+      scopes: ["ExerciseSession", "HeartRate", "Sleep", "TotalCaloriesBurned", "Distance"],
       metadata: {
         source: "settings",
         mode: "android_runtime_permissions_required",

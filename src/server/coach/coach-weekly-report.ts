@@ -65,7 +65,6 @@ function getRecoverySnapshot(metrics: Array<{ value: number; measuredAt: Date; n
   const recovery: CoachRecoverySnapshot = {
     ...(latest.has("sleep_minutes") ? { sleepMinutes: latest.get("sleep_minutes") } : {}),
     ...(latest.has("heart_rate") ? { restingHeartRate: latest.get("heart_rate") } : {}),
-    ...(latest.has("steps") ? { steps: latest.get("steps") } : {}),
     ...(latest.has("calories") ? { calories: latest.get("calories") } : {}),
   };
   return Object.keys(recovery).length > 0 ? recovery : null;
@@ -151,7 +150,6 @@ function getEvidenceKeys(metrics: CoachWeeklyMetrics) {
   }
   if (metrics.recovery?.sleepMinutes !== undefined) keys.add("recovery.sleepMinutes");
   if (metrics.recovery?.restingHeartRate !== undefined) keys.add("recovery.restingHeartRate");
-  if (metrics.recovery?.steps !== undefined) keys.add("recovery.steps");
   if (metrics.recovery?.calories !== undefined) keys.add("recovery.calories");
   if (metrics.limitations.length > 0) keys.add("limitations.declared");
   return keys;

@@ -43,7 +43,6 @@ private class SamsungHealthProviderSdk(private val context: Context) : SamsungHe
     companion object {
         private const val TAG = "TRAKNIO_HEALTH"
         private const val LAST_24_HOURS_SECONDS = 60L * 60L * 24L
-        private const val STEPS_DATA_TYPE_ID = "com.samsung.health.step_count"
         private const val HEART_RATE_DATA_TYPE_ID = "com.samsung.health.heart_rate"
     }
 
@@ -125,13 +124,6 @@ private class SamsungHealthProviderSdk(private val context: Context) : SamsungHe
         val now = Instant.now().toString()
         val records = mutableListOf<SamsungMetricRecord>()
         val errors = mutableListOf<String>()
-
-        runCatching { tryReadLatestStepCount() }
-            .onSuccess { it?.let { value -> records += SamsungMetricRecord("steps", value, now, "Samsung Health") } }
-            .onFailure { throwable ->
-                Log.e(TAG, "Steps query failed", throwable)
-                errors += "steps: ${throwable.message ?: throwable.javaClass.simpleName}"
-            }
 
         runCatching { tryReadLatestHeartRate() }
             .onSuccess { it?.let { value -> records += SamsungMetricRecord("heart_rate", value, now, "Samsung Health") } }
@@ -217,13 +209,9 @@ private class SamsungHealthProviderSdk(private val context: Context) : SamsungHe
         val read = java.lang.Enum.valueOf(accessTypeClass as Class<out Enum<*>>, "READ")
         val ofMethod = permissionClass.getMethod("of", Class.forName("$dataTypeRoot.DataType"), accessTypeClass)
 
-        val steps = resolveDataTypeFromId(STEPS_DATA_TYPE_ID)
         val hr = resolveDataTypeFromId(HEART_RATE_DATA_TYPE_ID)
 
-        return linkedSetOf(
-            ofMethod.invoke(null, steps, read)!!,
-            ofMethod.invoke(null, hr, read)!!,
-        )
+        return setOf(ofMethod.invoke(null, hr, read)!!)
     }
 
     private fun getGrantedPermissions(store: Any, requested: Set<Any>): Boolean {
@@ -246,17 +234,6 @@ private class SamsungHealthProviderSdk(private val context: Context) : SamsungHe
             .invoke(asyncFuture, 10L, TimeUnit.SECONDS)
     }
 
-    private suspend fun tryReadLatestStepCount(): Double? {
-        val stepsType = resolveDataTypeFromId(STEPS_DATA_TYPE_ID)
-        if (stepsType.javaClass.getMethod("getName").invoke(stepsType)?.toString().isNullOrBlank()) {
-            Log.e(TAG, "Invalid Samsung steps data type: $STEPS_DATA_TYPE_ID")
-            return null
-        }
-        val stepsTypeClass = Class.forName("$dataTypeRoot.DataType\$StepsType")
-        val totalOperation = stepsTypeClass.getField("TOTAL").get(null)
-        return queryLatestAggregate(totalOperation)?.toDouble()
-    }
-
     private suspend fun tryReadLatestHeartRate(): Double? {
         val item = queryLatestDataPoint(HEART_RATE_DATA_TYPE_ID) ?: return null
         val hrTypeClass = Class.forName("$dataTypeRoot.DataType\$HeartRateType")
@@ -264,22 +241,6 @@ private class SamsungHealthProviderSdk(private val context: Context) : SamsungHe
         val getValue = item.javaClass.getMethod("getValue", Class.forName("$dataRoot.Field"))
         val value = getValue.invoke(item, hrField) as? Number ?: return null
         return value.toDouble()
-    }
-
-    private suspend fun queryLatestAggregate(operation: Any): Number? {
-        val store = getConnectedStoreOrNull() ?: return null
-        val getBuilder = operation.javaClass.getMethod("getRequestBuilder")
-        val builder = getBuilder.invoke(operation) ?: return null
-        applyTimeFilterAndOrdering(builder)
-        val request = builder.javaClass.getMethod("build").invoke(builder)
-        val storeClass = Class.forName("$sdkRoot.HealthDataStore")
-        val async = storeClass.getMethod("aggregateDataAsync", Class.forName("$dataTypeRoot.AggregateRequest"))
-            .invoke(store, request)
-        val response = asyncGet(async) ?: return null
-        val dataList = response.javaClass.getMethod("getDataList").invoke(response) as? List<*> ?: return null
-        val first = dataList.firstOrNull() ?: return null
-        val value = first.javaClass.getMethod("getValue").invoke(first) ?: return null
-        return value as? Number
     }
 
     private suspend fun queryLatestDataPoint(dataTypeId: String): Any? {
@@ -299,11 +260,10 @@ private class SamsungHealthProviderSdk(private val context: Context) : SamsungHe
 
     private fun resolveDataTypeFromId(dataTypeId: String): Any {
         val dataTypesClass = Class.forName("$dataTypeRoot.DataTypes")
-        val fieldName = when (dataTypeId) {
-            STEPS_DATA_TYPE_ID -> "STEPS"
-            HEART_RATE_DATA_TYPE_ID -> "HEART_RATE"
-            else -> throw IllegalArgumentException("Unsupported Samsung Health data type id: $dataTypeId")
+        if (dataTypeId != HEART_RATE_DATA_TYPE_ID) {
+            throw IllegalArgumentException("Unsupported Samsung Health data type id: $dataTypeId")
         }
+        val fieldName = "HEART_RATE"
         val dataType = dataTypesClass.getField(fieldName).get(null)
             ?: throw IllegalStateException("DataType field not found for $dataTypeId")
         return dataType

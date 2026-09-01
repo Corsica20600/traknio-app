@@ -2,7 +2,7 @@ import { prisma } from "@/src/lib/prisma";
 import { getOrCreateDemoProfile } from "@/src/server/fitness-queries";
 
 export type SamsungMetricInput = {
-  metric: "steps" | "heart_rate" | "sleep_minutes" | "calories" | "distance_m";
+  metric: "heart_rate" | "sleep_minutes" | "calories" | "distance_m";
   value: number;
   measuredAt: string;
   sourceDevice?: string;
@@ -31,7 +31,6 @@ const providerConfig: Record<
 };
 
 function toUnit(metric: SamsungMetricInput["metric"]) {
-  if (metric === "steps") return "steps";
   if (metric === "heart_rate") return "bpm";
   if (metric === "sleep_minutes") return "min";
   if (metric === "calories") return "kcal";

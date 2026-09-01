@@ -2,11 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <uses-permission android:name="android.permission.health.READ_DISTANCE" />
     <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
-    <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.READ_TOTAL_CALORIES_BURNED" />
 
     <queries>
@@ -25,7 +23,7 @@
         android:theme="@style/Theme.TraknioPrivate">
         <meta-data
             android:name="com.samsung.android.health.permission.read"
-            android:value="com.samsung.health.step_count;com.samsung.health.heart_rate;com.samsung.health.exercise;com.samsung.health.sleep" />
+            android:value="com.samsung.health.heart_rate;com.samsung.health.exercise;com.samsung.health.sleep" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

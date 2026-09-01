@@ -63,7 +63,6 @@ function formatDataKey(key: string) {
     "totals.durationSeconds": "durée des séances",
     "recovery.sleepMinutes": "sommeil",
     "recovery.restingHeartRate": "fréquence cardiaque au repos",
-    "recovery.steps": "pas",
     "recovery.calories": "calories",
     "limitations.declared": "limitations déclarées",
   };

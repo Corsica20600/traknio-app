@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     update: {
       status: "PENDING",
       displayName: "Health Connect",
-      scopes: ["ExerciseSession", "HeartRate", "Sleep", "Steps", "TotalCaloriesBurned", "Distance"],
+      scopes: ["ExerciseSession", "HeartRate", "Sleep", "TotalCaloriesBurned", "Distance"],
       disconnectedAt: null,
       metadata: {
         source: "android_device_token",
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
       provider: "HEALTH_CONNECT",
       status: "PENDING",
       displayName: "Health Connect",
-      scopes: ["ExerciseSession", "HeartRate", "Sleep", "Steps", "TotalCaloriesBurned", "Distance"],
+      scopes: ["ExerciseSession", "HeartRate", "Sleep", "TotalCaloriesBurned", "Distance"],
       metadata: {
         source: "android_device_token",
         deviceLabel: label,

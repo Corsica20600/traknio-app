@@ -383,11 +383,9 @@ function scoreRestingHeartRate(bpm: number | null) {
   return 9;
 }
 
-function scoreActivity(steps: number | null, calories: number | null) {
-  if (steps == null && calories == null) return null;
-  const stepScore = steps == null ? 0 : Math.min(12, (steps / 8000) * 12);
-  const calorieScore = calories == null ? 0 : Math.min(8, (calories / 600) * 8);
-  return clampPercent(stepScore + calorieScore);
+function scoreActivity(calories: number | null) {
+  if (calories == null) return null;
+  return clampPercent(Math.min(20, (calories / 600) * 20));
 }
 
 function scoreLastSession(latestCompletedAt: Date | null) {
@@ -1375,11 +1373,10 @@ export async function getDashboardDataForDemoUser() {
 
   const sleepMinutes = healthByMetric.get("sleep_minutes")?.value != null ? Math.round(healthByMetric.get("sleep_minutes")!.value) : null;
   const restingHeartRate = healthByMetric.get("heart_rate")?.value != null ? Math.round(healthByMetric.get("heart_rate")!.value) : null;
-  const stepsToday = todayHealthByMetric.get("steps")?.value != null ? Math.round(todayHealthByMetric.get("steps")!.value) : null;
   const caloriesToday = todayHealthByMetric.get("calories")?.value != null ? Math.round(todayHealthByMetric.get("calories")!.value) : null;
   const sleepPoints = scoreSleep(sleepMinutes);
   const heartPoints = scoreRestingHeartRate(restingHeartRate);
-  const activityPoints = scoreActivity(stepsToday, caloriesToday);
+  const activityPoints = scoreActivity(caloriesToday);
   const sessionPoints = scoreLastSession(sessionsWithStats[0]?.date ?? null);
   const hasHealthReadinessData = sleepPoints != null || heartPoints != null || activityPoints != null;
   const availableMax = hasHealthReadinessData
@@ -1468,7 +1465,6 @@ export async function getDashboardDataForDemoUser() {
       tone: recoveryScore == null ? "accent" : getRecoveryTone(recoveryScore),
       sleepLabel: formatSleep(sleepMinutes),
       restingHeartRate,
-      stepsToday,
       caloriesToday,
       recommendation: recoveryScore == null
         ? healthPrepared

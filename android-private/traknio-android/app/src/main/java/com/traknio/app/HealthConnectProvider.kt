@@ -7,7 +7,6 @@ import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
-import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
@@ -22,7 +21,6 @@ class HealthConnectProvider(private val context: Context) {
         private const val TAG = "TRAKNIO_HEALTH_CONNECT"
 
         val permissions = setOf(
-            HealthPermission.getReadPermission(StepsRecord::class),
             HealthPermission.getReadPermission(HeartRateRecord::class),
             HealthPermission.getReadPermission(SleepSessionRecord::class),
             HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),
@@ -62,13 +60,6 @@ class HealthConnectProvider(private val context: Context) {
         val measuredAt = end.toString()
         val records = mutableListOf<SamsungMetricRecord>()
         val errors = mutableListOf<String>()
-
-        runCatching { readSteps(dailyRange) }
-            .onSuccess { value -> if (value > 0) records += SamsungMetricRecord("steps", value, measuredAt, "Health Connect") }
-            .onFailure { throwable ->
-                Log.e(TAG, "Steps read failed", throwable)
-                errors += "steps"
-            }
 
         runCatching { readAverageHeartRate(heartRateRange) }
             .onSuccess { value -> if (value > 0) records += SamsungMetricRecord("heart_rate", value, measuredAt, "Health Connect") }
@@ -112,16 +103,6 @@ class HealthConnectProvider(private val context: Context) {
     }
 
     private fun client() = HealthConnectClient.getOrCreate(context)
-
-    private suspend fun readSteps(timeRange: TimeRangeFilter): Double {
-        val response = client().aggregate(
-            AggregateRequest(
-                metrics = setOf(StepsRecord.COUNT_TOTAL),
-                timeRangeFilter = timeRange,
-            ),
-        )
-        return response[StepsRecord.COUNT_TOTAL]?.toDouble() ?: 0.0
-    }
 
     private suspend fun readAverageHeartRate(timeRange: TimeRangeFilter): Double {
         val response = client().readRecords(

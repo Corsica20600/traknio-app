@@ -11,7 +11,6 @@ type DailyReadinessCardProps = {
     tone: "accent" | "success" | "orange" | "danger";
     sleepLabel: string | null;
     restingHeartRate: number | null;
-    stepsToday: number | null;
     caloriesToday: number | null;
     recommendation: string;
   };
@@ -65,7 +64,6 @@ export function DailyReadinessCard({ readiness }: DailyReadinessCardProps) {
         <div className="daily-readiness-card__metrics">
           <span><b>{readiness.sleepLabel ?? "-"}</b>Sommeil</span>
           <span><b>{readiness.restingHeartRate ? `${readiness.restingHeartRate} bpm` : "-"}</b>FC repos</span>
-          <span><b>{formatNumber(readiness.stepsToday)}</b>Pas</span>
           <span><b>{readiness.caloriesToday ? `${formatNumber(readiness.caloriesToday)} kcal` : "-"}</b>Calories</span>
         </div>
 
@@ -97,7 +95,6 @@ export function DailyReadinessCard({ readiness }: DailyReadinessCardProps) {
       <div className="daily-readiness-card__metrics">
         <span><b>{readiness.sleepLabel ?? "-"}</b>Sommeil</span>
         <span><b>{readiness.restingHeartRate ? `${readiness.restingHeartRate} bpm` : "-"}</b>FC repos</span>
-        <span><b>{formatNumber(readiness.stepsToday)}</b>Pas</span>
         <span><b>{readiness.caloriesToday ? `${formatNumber(readiness.caloriesToday)} kcal` : "-"}</b>Calories</span>
       </div>
 

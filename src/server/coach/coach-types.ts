@@ -27,7 +27,6 @@ export type CoachWorkoutSession = {
 export type CoachRecoverySnapshot = {
   sleepMinutes?: number;
   restingHeartRate?: number;
-  steps?: number;
   calories?: number;
 };
 
