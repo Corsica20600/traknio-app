@@ -3,49 +3,18 @@ import { BRAND } from "@/src/lib/brand";
 import { PublicLegalPage } from "../public-legal-page";
 
 const sections = [
-  {
-    title: "Usage de l'application",
-    items: [
-      `${BRAND.name} aide à organiser les entraînements, suivre les performances et synchroniser une montre Wear OS.`,
-      "L'utilisateur reste responsable de l'exécution des exercices, du choix des charges et de l'adaptation à son niveau.",
-      "Les contenus proposés ne remplacent pas un avis médical ou l'accompagnement d'un professionnel.",
-    ],
-  },
-  {
-    title: "Compte et abonnement",
-    items: [
-      "La connexion Google rattache les données au bon compte utilisateur.",
-      "Les abonnements donnent accès aux fonctionnalités premium indiquées dans l'application.",
-      "La gestion et la résiliation de l'abonnement se font depuis la plateforme utilisée lors de l'achat.",
-    ],
-  },
-  {
-    title: "Services connectés",
-    items: [
-      "Spotify, Health Connect et Samsung Health sont optionnels.",
-      "La disponibilité de ces services dépend des autorisations accordées et des plateformes tierces.",
-      "Traknio peut évoluer pour améliorer les fonctionnalités, la sécurité et la stabilité du service.",
-    ],
-  },
+  { title: "1. Objet et éditeur", items: ["Les présentes conditions encadrent l'accès et l'utilisation de Traknio, service édité par CorsaiManager, comprenant son site, ses applications Android et Wear OS et les fonctionnalités qui y sont proposées.", "Les informations d'identification et les coordonnées de l'éditeur sont précisées dans les Mentions légales. Ces conditions ne constituent pas un avis juridique personnalisé."] },
+  { title: "2. Acceptation, accès et compte", items: ["L'utilisation de Traknio implique l'acceptation des présentes conditions et de la Politique de confidentialité. L'utilisateur doit fournir des informations exactes, protéger ses moyens de connexion et signaler tout accès non autorisé.", "Certaines fonctionnalités nécessitent un compte Google ou un appareil compatible. L'utilisateur est responsable de l'usage fait depuis son compte et de la conformité de son utilisation aux lois applicables."] },
+  { title: "3. Fonctionnalités Traknio", items: ["Traknio permet notamment de créer et adapter des programmes, suivre des séances, mémoriser des charges, consulter l'historique et des statistiques, et synchroniser certaines données entre téléphone et montre Wear OS compatible.", "Les fonctionnalités, leur disponibilité et leur compatibilité peuvent varier selon l'appareil, le système, la version installée, la connexion réseau, les autorisations accordées et le niveau d'accès de l'utilisateur."] },
+  { title: "4. Santé, entraînement et responsabilité", items: ["Traknio est un outil de suivi et d'organisation sportive. Il ne fournit pas de diagnostic médical, de traitement, ni de conseil médical personnalisé ; ses indicateurs de récupération et contenus IA sont informatifs et ne remplacent pas un professionnel de santé.", "L'utilisateur demeure responsable de son état de santé, du choix des exercices, charges et intensités. Il doit solliciter un professionnel qualifié avant ou pendant sa pratique en cas de doute, douleur, blessure, grossesse ou contre-indication."] },
+  { title: "5. Services et données tiers", items: ["Health Connect, Samsung Health, Spotify, Google Play et les appareils Wear OS sont des services ou plateformes tiers et optionnels. Leur utilisation est soumise à leurs propres conditions et politiques. Les autorisations peuvent être retirées depuis Traknio, l'appareil ou le service tiers selon le cas.", "Les données Health Connect actuellement utilisées, seulement après autorisation, sont la fréquence cardiaque, le sommeil, les calories totales brûlées et la distance. Traknio ne lit pas actuellement les pas via Health Connect.", "Aucune intégration TikTok destinée aux utilisateurs finaux n'est actuellement proposée par Traknio. Toute évolution fera l'objet d'une information préalable adaptée."] },
+  { title: "6. Abonnements et paiements", items: ["L'accès à certaines fonctionnalités peut être payant. Le prix, la période, les conditions applicables et les modalités de renouvellement éventuel sont affichés avant l'achat sur le canal concerné.", "Les paiements web, lorsqu'ils sont disponibles, sont traités par Stripe ; les achats Android relèvent des mécanismes Google Play. L'annulation, le renouvellement et les remboursements sont gérés selon les mécanismes et règles du canal d'achat, ainsi que les dispositions impératives applicables."] },
+  { title: "7. Usages interdits et propriété intellectuelle", items: ["Il est interdit de perturber le service, contourner ses mesures de sécurité, accéder aux comptes ou données d'autrui, introduire un code malveillant, utiliser le service à des fins illicites ou porter atteinte aux droits de tiers.", "Les éléments de Traknio (marques, logiciels, visuels, textes et bases de données) sont protégés. Sauf disposition légale ou autorisation écrite, aucune reproduction, extraction ou exploitation non autorisée n'est permise."] },
+  { title: "8. Disponibilité, évolution et responsabilité", items: ["Traknio peut faire l'objet de maintenance, de mises à jour, d'évolutions ou d'interruptions raisonnablement nécessaires, notamment pour la sécurité et la stabilité. Nous ne garantissons pas une disponibilité ininterrompue ni la compatibilité avec tous les appareils ou services tiers.", "Dans les limites autorisées par la loi, Traknio ne saurait être responsable des dommages indirects, de la perte de données imputable à l'utilisateur ou à un tiers, ni des conséquences d'un entraînement choisi par l'utilisateur. Rien ne limite les droits auxquels il ne peut être renoncé ni une responsabilité qui ne peut être exclue légalement."] },
+  { title: "9. Suspension, résiliation et données", items: ["Traknio peut suspendre ou limiter un accès en cas de violation des présentes conditions, de risque de sécurité ou d'obligation légale. L'utilisateur peut cesser d'utiliser le service et demander la suppression de son compte selon la procédure publique dédiée.", "La suppression n'affecte pas les données devant être conservées au titre d'une obligation légale, de la prévention de la fraude ou de la défense de droits, dans les limites applicables."] },
+  { title: "10. Modifications, droit applicable et contact", items: ["Les présentes conditions peuvent évoluer pour tenir compte du service ou de la réglementation. La version en ligne et sa date de mise à jour s'appliquent à compter de leur publication, sous réserve des règles impératives et d'une information préalable lorsque requise.", "Sous réserve des règles impératives de protection du consommateur, les présentes conditions relèvent du droit français. Pour toute question ou réclamation, contactez support@traknio.com ; les voies de recours légalement applicables restent ouvertes."] },
 ] as const;
 
-export const metadata: Metadata = {
-  title: "Conditions d'utilisation - Traknio",
-  description: `Conditions d'utilisation de ${BRAND.name}.`,
-  alternates: { canonical: "/legal/terms" },
-};
+export const metadata: Metadata = { title: "Conditions générales d'utilisation - Traknio", description: `Conditions générales d'utilisation de ${BRAND.name}.`, alternates: { canonical: "/legal/terms" } };
 
-export default function TermsPage() {
-  return (
-    <PublicLegalPage
-      eyebrow="Légal"
-      title="Conditions d'utilisation"
-      description={`Ces conditions encadrent l'utilisation de ${BRAND.name}, de ses fonctionnalités sportives et de ses intégrations.`}
-      updatedAt="1 août 2026"
-      lead="Le service est conçu pour accompagner l'entraînement, pas pour remplacer un suivi médical."
-      sections={sections}
-      noteTitle="Besoin d'aide ?"
-      note="Pour une question sur l'utilisation de Traknio ou l'abonnement, contacte le support."
-    />
-  );
-}
+export default function TermsPage() { return <PublicLegalPage eyebrow="Légal" title="Conditions générales d'utilisation" description={`Les règles d'accès et d'utilisation du service ${BRAND.name}.`} updatedAt="2 septembre 2026" lead="À lire avec la Politique de confidentialité et les conditions des services tiers éventuellement activés." sections={sections} noteTitle="Assistance" note="Pour une question sur l'utilisation de Traknio ou un accès au service, écrivez à support@traknio.com." />; }

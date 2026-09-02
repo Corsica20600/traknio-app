@@ -10,6 +10,7 @@ const navLinks = [
   { href: "/#progression", label: "Progression" },
   { href: "/#tarifs", label: "Tarifs" },
   { href: "/#faq", label: "FAQ" },
+  { href: "/contact", label: "Contact" },
 ] as const;
 
 export function PublicHeader({ isAuthenticated = false }: { isAuthenticated?: boolean }) {

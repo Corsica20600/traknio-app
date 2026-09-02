@@ -92,10 +92,12 @@ export function PublicLegalPage({
             <strong>Légal</strong>
             <Link href="/legal/privacy">Confidentialité</Link>
             <Link href="/legal/terms">Conditions d&apos;utilisation</Link>
+            <Link href="/legal/legal-notice">Mentions légales</Link>
             <Link href="/legal/data-deletion">Suppression des données</Link>
           </nav>
           <nav aria-label="Contact Traknio">
             <strong>Contact</strong>
+            <Link href="/contact">Nous contacter</Link>
             <a href="mailto:contact@traknio.com">contact@traknio.com</a>
             <a href="mailto:support@traknio.com">support@traknio.com</a>
           </nav>

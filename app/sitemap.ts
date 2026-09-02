@@ -3,8 +3,10 @@ import { absoluteUrl } from "@/src/lib/site-url";
 
 const publicRoutes = [
   { path: "/", priority: 1 },
+  { path: "/contact", priority: 0.6 },
   { path: "/legal/privacy", priority: 0.7 },
   { path: "/legal/terms", priority: 0.7 },
+  { path: "/legal/legal-notice", priority: 0.6 },
   { path: "/legal/data-deletion", priority: 0.7 },
 ] as const;
 

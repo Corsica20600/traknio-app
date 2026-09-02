@@ -10,7 +10,7 @@ const sections = [
       `Connecte-toi au compte Google utilisé dans ${BRAND.name}.`,
       "Vérifie que les données affichées correspondent au compte concerné.",
       "Écris au support en demandant la suppression du compte et des données associées.",
-      "Après vérification, le profil, les séances, les programmes et les mesures associées sont supprimés.",
+      "Après vérification raisonnable de la demande, Traknio traite la suppression du profil, des séances, des programmes et des mesures associées.",
     ],
   },
   {
@@ -44,11 +44,11 @@ export default function DataDeletionPage() {
       eyebrow="Données"
       title="Suppression des données"
       description="Cette page explique comment demander la suppression d'un compte et des données associées."
-      updatedAt="1 août 2026"
-      lead="La demande peut être envoyée à l'adresse support officielle de Traknio."
+      updatedAt="2 septembre 2026"
+      lead="La demande manuelle peut être envoyée à l'adresse support officielle de Traknio."
       sections={sections}
       noteTitle="Avant suppression"
-      note="L'utilisateur peut exporter ses données depuis l'application avant de demander la suppression définitive."
+      note="L'utilisateur peut exporter ses données depuis l'application avant de demander la suppression définitive. Cette page ne déclenche pas une suppression automatique."
     />
   );
 }

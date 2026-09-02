@@ -6,6 +6,9 @@ import { auth } from "@/auth";
 import { BRAND } from "@/src/lib/brand";
 import { PublicHeader } from "./public-header";
 
+const GOOGLE_PLAY_URL = "https://play.google.com/store/apps/details?id=com.traknio.app";
+const GOOGLE_PLAY_BADGE_URL = "https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png";
+
 const proofItems = [
   {
     title: "Programme IA personnalisé",
@@ -42,7 +45,7 @@ const watchPoints = [
 const recoveryMetrics = [
   { label: "Sommeil", value: "7 h 24" },
   { label: "FC repos", value: "58 bpm" },
-  { label: "Pas", value: "8 420" },
+  { label: "Calories", value: "2 140 kcal" },
   { label: "Score", value: "82" },
 ] as const;
 
@@ -76,7 +79,7 @@ const advantageItems = [
   },
   {
     title: "Récupération contextualisée",
-    text: "Sommeil, fréquence cardiaque, pas et calories donnent une lecture rapide de ton état du jour.",
+    text: "Sommeil, fréquence cardiaque, calories et distance donnent une lecture rapide de ton état du jour.",
   },
   {
     title: "Progression gamifiée",
@@ -99,7 +102,7 @@ const faqItems = [
   },
   {
     question: "Quelles données Health Connect sont utilisées ?",
-    answer: "Traknio peut utiliser le sommeil, la fréquence cardiaque au repos, les pas et les calories pour éclairer la récupération.",
+    answer: "Traknio peut utiliser le sommeil, la fréquence cardiaque, les calories totales brûlées et la distance pour éclairer la récupération.",
   },
   {
     question: "Traknio fonctionne-t-il sans Spotify ?",
@@ -226,6 +229,9 @@ export default async function HomePage() {
                 Découvrir Traknio
               </a>
             </div>
+            <a href={GOOGLE_PLAY_URL} aria-label="Télécharger Traknio sur Google Play">
+              <Image src={GOOGLE_PLAY_BADGE_URL} alt="Disponible sur Google Play" width={178} height={53} />
+            </a>
             <ul className="trk-trust" aria-label="Informations clés">
               <li>Programme personnalisé par IA</li>
               <li>Synchronisation Health Connect</li>
@@ -395,7 +401,7 @@ export default async function HomePage() {
             </h2>
             <p>
               Traknio met en contexte tes séances avec les données Health Connect que tu choisis de
-              connecter : sommeil, fréquence cardiaque au repos, pas et calories. Ce score reste un
+              connecter : sommeil, fréquence cardiaque, calories totales brûlées et distance. Ce score reste un
               indicateur sportif, pas un diagnostic médical.
             </p>
           </div>
@@ -487,9 +493,9 @@ export default async function HomePage() {
                 <CheckItem key={feature}>{feature}</CheckItem>
               ))}
             </ul>
-            <span className="trk-button trk-button--primary trk-button--disabled" aria-disabled="true">
-              Bientôt disponible
-            </span>
+            <Link className="trk-button trk-button--primary" href="/login">
+              Accéder à Traknio
+            </Link>
           </article>
         </section>
 
@@ -511,9 +517,9 @@ export default async function HomePage() {
         <section className="trk-final-cta trk-reveal">
           <div>
             <h2>Ta prochaine progression commence avec ta prochaine séance</h2>
-            <span className="trk-button trk-button--light trk-button--disabled" aria-disabled="true">
-              Bientôt disponible
-            </span>
+            <Link className="trk-button trk-button--light" href="/login">
+              Découvrir l&apos;application
+            </Link>
           </div>
           <PhoneShot
             src="/brand/traknio-phone-hero-v2.png"
@@ -545,10 +551,12 @@ export default async function HomePage() {
               <strong>Légal</strong>
               <Link href="/legal/privacy">Confidentialité</Link>
               <Link href="/legal/terms">Conditions d&apos;utilisation</Link>
+              <Link href="/legal/legal-notice">Mentions légales</Link>
               <Link href="/legal/data-deletion">Suppression des données</Link>
             </nav>
             <nav aria-label="Contact Traknio">
               <strong>Contact</strong>
+              <Link href="/contact">Nous contacter</Link>
               <a href="mailto:contact@traknio.com">contact@traknio.com</a>
               <a href="mailto:support@traknio.com">support@traknio.com</a>
             </nav>

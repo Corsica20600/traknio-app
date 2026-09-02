@@ -3,53 +3,17 @@ import { BRAND } from "@/src/lib/brand";
 import { PublicLegalPage } from "../public-legal-page";
 
 const sections = [
-  {
-    title: "Données collectées",
-    items: [
-      "Compte Google : adresse e-mail et nom affiché pour identifier le compte.",
-      "Données d'entraînement : programmes, séances, séries, charges, répétitions et progression.",
-      "Données d'abonnement : identifiants d'achat, statut d'abonnement et période d'accès.",
-      "Données d'intégrations : Spotify, Health Connect ou Samsung Health uniquement quand l'utilisateur les active.",
-      "Données techniques : synchronisation téléphone et montre, état de session et dates de synchronisation.",
-    ],
-  },
-  {
-    title: "Utilisation",
-    items: [
-      "Retrouver l'historique sportif sur les appareils connectés au compte.",
-      "Calculer les statistiques, volumes, séries, tendances et indicateurs de progression.",
-      "Synchroniser les séances entre téléphone et Galaxy Watch.",
-      "Afficher l'état du jour à partir des données santé autorisées par l'utilisateur.",
-    ],
-  },
-  {
-    title: "Contrôle utilisateur",
-    items: [
-      "Les accès santé et Spotify sont optionnels et révocables.",
-      "L'utilisateur peut exporter ses données depuis l'application.",
-      "L'utilisateur peut demander la suppression de son compte et des données associées.",
-      "Les données ne sont pas vendues à des tiers.",
-    ],
-  },
+  { title: "1. Responsable et contact", items: ["Le service Traknio est édité par CorsaiManager (ci-après « Traknio », « nous »). Les informations d'identification professionnelle complémentaires figurent dans les Mentions légales.", "Pour toute question relative aux données personnelles ou pour exercer un droit : contact@traknio.com. Pour l'assistance produit : support@traknio.com.", "Cette politique décrit les traitements réalisés par Traknio pour le site public, l'application web et les applications Android et Wear OS. Elle ne constitue pas un avis juridique personnalisé."] },
+  { title: "2. Données que nous traitons", items: ["Données de compte : adresse e-mail, nom ou nom affiché transmis lors de la connexion Google, identifiants techniques de compte et préférences de profil nécessaires pour accéder au service.", "Données d'entraînement : programmes, exercices, séances, séries, charges, répétitions, temps de repos, historique, objectifs renseignés et mesures de progression que l'utilisateur choisit d'enregistrer.", "Données techniques et d'utilisation : informations strictement nécessaires au fonctionnement et à la sécurité, telles que dates de connexion ou de synchronisation, statut des intégrations, appareil source de synchronisation et journaux techniques limités.", "Données d'abonnement : statut d'accès, période d'accès et identifiants techniques de souscription ou d'achat. Traknio ne reçoit pas les numéros de carte bancaire complets."] },
+  { title: "3. Données de santé et d'activité", items: ["Les données de santé et d'activité peuvent être des données sensibles au sens de la réglementation applicable. Elles ne sont traitées que lorsque l'utilisateur active la connexion concernée et accorde les autorisations demandées sur son appareil.", "Health Connect : Traknio lit uniquement la fréquence cardiaque, le sommeil, les calories totales brûlées et la distance autorisés par l'utilisateur. Traknio n'utilise pas actuellement de donnée de pas via Health Connect.", "Fréquence cardiaque : elle peut être utilisée pour présenter un repère de récupération et contextualiser les statistiques personnelles. Sommeil : sa durée peut contribuer au repère de récupération. Calories totales brûlées : elles peuvent contribuer aux statistiques quotidiennes et au repère de récupération. Distance : elle peut être enregistrée comme métrique d'activité et de progression.", "Wear OS : les données de séance et les actions réalisées sur une montre compatible (par exemple séries validées, charges, repos et calories de séance lorsqu'elles sont transmises) sont synchronisées avec le compte pour assurer la continuité téléphone-montre.", "Samsung Health : lorsque la synchronisation correspondante est proposée et activée, Traknio peut recevoir les mêmes catégories de métriques actuellement prises en charge : fréquence cardiaque, sommeil, calories et distance. Samsung Health n'est pas requis pour utiliser Traknio."] },
+  { title: "4. Données provenant de services tiers", items: ["Google : l'authentification sert à créer ou rattacher le compte Traknio. Les données reçues sont limitées aux informations d'identification nécessaires au compte.", "Spotify : si l'utilisateur connecte volontairement Spotify, Traknio peut traiter les informations de profil nécessaires à cette connexion et les jetons d'accès chiffrés afin de proposer les commandes de lecture prévues. L'accès peut être déconnecté depuis les réglages.", "Paiements : les paiements web, lorsqu'ils sont proposés, sont traités par Stripe ; les achats réalisés dans l'application Android suivent les mécanismes de Google Play. Ces prestataires traitent les données de paiement selon leurs propres politiques. Traknio conserve seulement les informations nécessaires à la gestion de l'accès et à la preuve de la souscription.", "TikTok : aucune connexion TikTok, aucun scope TikTok et aucune collecte de données TikTok d'utilisateur final ne sont actuellement implémentés dans Traknio. Si TikTok est utilisé par l'éditeur pour publier ou gérer ses propres contenus de communication, cette opération ne relie pas un compte TikTok d'utilisateur final à Traknio. En cas d'ajout ultérieur d'une intégration utilisateur, la présente politique sera mise à jour avant son activation, avec les données, finalités, modalités de révocation et de suppression applicables."] },
+  { title: "5. Finalités, bases légales et caractère facultatif", items: ["Exécuter le service demandé (compte, entraînements, synchronisation, accès premium et assistance) : nécessité de l'exécution du contrat ou de mesures précontractuelles.", "Traiter les données de santé optionnelles : consentement explicite de l'utilisateur, recueilli par l'activation et les autorisations de l'appareil. Le refus ou le retrait n'empêche pas l'usage des fonctionnalités qui n'en dépendent pas.", "Protéger le service, prévenir les abus, corriger les incidents et défendre nos droits : intérêt légitime, dans le respect des droits et libertés des personnes.", "Respecter une obligation légale, notamment comptable ou fiscale lorsqu'elle s'applique : obligation légale. Les données demandées pour créer un compte ou fournir un achat sont nécessaires ; les intégrations santé, Spotify et les contenus facultatifs ne le sont pas."] },
+  { title: "6. Destinataires, sous-traitants et transferts", items: ["L'accès est limité aux personnes habilitées chez Traknio et aux prestataires techniques nécessaires à la fourniture du service : hébergement et déploiement (Vercel), base de données PostgreSQL (Neon), authentification Google, paiements Stripe ou Google Play, Spotify lorsque l'utilisateur l'active, et OpenAI lorsque l'utilisateur utilise une fonctionnalité IA proposée par Traknio.", "Nous ne vendons pas les données personnelles ni les données de santé. Nous ne les communiquons pas à des tiers à des fins de publicité comportementale.", "Certains prestataires peuvent traiter des données hors de l'Espace économique européen. Dans ce cas, les garanties appropriées prévues par la réglementation applicable (par exemple décision d'adéquation ou clauses contractuelles types) sont recherchées avec le prestataire concerné."] },
+  { title: "7. Conservation et sécurité", items: ["Les données de compte, d'entraînement et de synchronisation sont conservées pendant la durée du compte, puis supprimées ou anonymisées selon la procédure décrite sur la page Suppression des données, sous réserve des durées légales et des besoins de sécurité.", "Les données d'abonnement et justificatifs associés sont conservés pendant la durée nécessaire à la gestion de l'accès et, lorsque requis, aux obligations comptables, fiscales ou à la gestion des litiges. Les journaux techniques sont conservés pour une durée limitée et proportionnée à la sécurité et au diagnostic.", "Nous appliquons des mesures techniques et organisationnelles raisonnables : accès restreint, authentification, chiffrement des secrets d'intégration, communications HTTPS et séparation des accès selon leur nécessité. Aucun système ne peut toutefois garantir une sécurité absolue."] },
+  { title: "8. Vos droits et suppression", items: ["Selon les conditions prévues par le RGPD, vous pouvez demander l'accès, la rectification, l'effacement, la limitation, l'opposition et, lorsque applicable, la portabilité de vos données. Vous pouvez retirer votre consentement aux données de santé à tout moment, sans affecter la licéité des traitements antérieurs.", "Pour exercer un droit, écrivez à contact@traknio.com en précisant le compte concerné et la demande. Une vérification raisonnable d'identité peut être demandée. Vous pouvez aussi introduire une réclamation auprès de l'autorité de contrôle compétente, notamment la CNIL en France.", "La procédure de suppression de compte et des données associées est accessible sans connexion sur la page Suppression des données. La révocation d'une intégration se fait dans les réglages de Traknio ou dans le service tiers lorsque celui-ci le prévoit."] },
+  { title: "9. Mineurs, cookies et évolutions", items: ["Traknio n'est pas destiné aux personnes n'ayant pas l'âge requis pour consentir seules au traitement de leurs données selon la loi applicable. Un mineur doit utiliser le service avec l'autorisation de son représentant légal lorsque celle-ci est requise.", "Le site ne met pas en œuvre de cookie publicitaire ni d'outil d'analytics tiers identifié dans la version actuelle. Des cookies ou stockages techniques peuvent être nécessaires à la connexion, à la sécurité et au fonctionnement du service. Si des traceurs non essentiels sont ajoutés, une information et, si nécessaire, un mécanisme de consentement seront mis en place avant leur utilisation.", "Nous pouvons modifier cette politique afin de refléter une évolution du service ou de la réglementation. La date de mise à jour sera alors modifiée ; en cas de changement substantiel, une information appropriée sera fournie."] },
 ] as const;
 
-export const metadata: Metadata = {
-  title: "Confidentialité - Traknio",
-  description: `Politique de confidentialité de ${BRAND.name}.`,
-  alternates: { canonical: "/legal/privacy" },
-};
+export const metadata: Metadata = { title: "Politique de confidentialité - Traknio", description: `Politique de confidentialité détaillée de ${BRAND.name}, notamment pour les données de santé et les intégrations tierces.`, alternates: { canonical: "/legal/privacy" } };
 
-export default function PrivacyPage() {
-  return (
-    <PublicLegalPage
-      eyebrow="Légal"
-      title="Confidentialité"
-      description={`${BRAND.name} utilise les données nécessaires au suivi sportif, à la synchronisation et aux fonctionnalités choisies par l'utilisateur.`}
-      updatedAt="1 août 2026"
-      lead="Cette version publique présente le cadre de traitement prévu pour la publication de Traknio."
-      sections={sections}
-      noteTitle="Contact données"
-      note="Pour toute question liée aux données personnelles, contacte Traknio par e-mail."
-    />
-  );
-}
+export default function PrivacyPage() { return <PublicLegalPage eyebrow="Légal" title="Politique de confidentialité" description={`Comment ${BRAND.name} traite les données nécessaires au service et les données optionnelles liées à la santé.`} updatedAt="2 septembre 2026" lead="Document d'information général à faire relire par un conseil juridique au regard de votre situation." sections={sections} noteTitle="Contact données" note="Pour exercer un droit ou demander la suppression des données associées à un compte, écrivez à contact@traknio.com." />; }
