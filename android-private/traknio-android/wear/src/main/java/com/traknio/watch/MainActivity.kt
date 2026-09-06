@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -68,6 +69,7 @@ import com.traknio.watch.R
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         setContent {
             TraknioWearApp()
@@ -102,6 +104,12 @@ private fun TraknioWearApp() {
         ?.payload
         ?.status != "COMPLETED" && state is WatchScreenState.Ready
     KeepScreenOn(keepScreenOn)
+    // Continue the same plain launch presentation while the initial data loads.
+    // No extra Activity, timer or splash animation; data loading is unchanged.
+    if (state is WatchScreenState.Loading) {
+        LoadingScreen()
+        return
+    }
     MaterialTheme {
         WatchChrome(
             compact = (state as? WatchScreenState.Ready)?.payload?.status == "COMPLETED",
@@ -165,9 +173,15 @@ private fun WatchChrome(
 
 @Composable
 private fun LoadingScreen() {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("Traknio", fontSize = 20.sp, fontWeight = FontWeight.Black)
-        Text("Connexion...", color = Color(0xFFB7C9EA), fontSize = 13.sp)
+    Box(
+        modifier = Modifier.fillMaxSize().background(Color.Black),
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.foundation.Image(
+            painter = painterResource(R.drawable.traknio_favicon),
+            contentDescription = null,
+            modifier = Modifier.size(48.dp),
+        )
     }
 }
 

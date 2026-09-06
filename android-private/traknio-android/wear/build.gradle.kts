@@ -73,7 +73,7 @@ android {
         applicationId = "com.traknio.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 25
+        versionCode = 28
         versionName = "0.5.8"
 
         val syncBaseUrl = propertyValue("TRAKNIO_SYNC_BASE_URL")
@@ -111,6 +111,8 @@ android {
 }
 
 dependencies {
+    // Wear-sized system splash, including the API 30 compatibility implementation.
+    implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("androidx.activity:activity-compose:1.9.2")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")

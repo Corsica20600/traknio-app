@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <style name="Theme.TraknioWear.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@android:color/black</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/wear_splash_icon</item>
+        <item name="postSplashScreenTheme">@style/Theme.TraknioWear</item>
+    </style>
     <style name="Theme.TraknioWear" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/wear_background</item>
         <item name="android:windowNoTitle">true</item>
