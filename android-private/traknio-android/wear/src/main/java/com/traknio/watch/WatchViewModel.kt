@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 
 class WatchViewModel(context: Context) : ViewModel() {
@@ -37,10 +39,21 @@ class WatchViewModel(context: Context) : ViewModel() {
     private var restMutationPending = false
     private var pollingJob: Job? = null
     private var pairingInProgress = false
+    private var ongoingSessionMissing = false
     private var lastAccountCheckElapsedMs = 0L
     private val metricsFinalizationInFlight = mutableSetOf<String>()
 
     init {
+        // Observe presentation transitions, including optimistic finish, without changing polling.
+        viewModelScope.launch {
+            state.mapNotNull { screen ->
+                (screen as? WatchScreenState.Ready)?.let {
+                    WorkoutOngoingState.from(it.payload.copy(restRemaining = it.displayRestRemaining))
+                }
+            }
+                .distinctUntilChanged()
+                .collectLatest { if (!ongoingSessionMissing) WorkoutOngoingActivity.update(appContext, it) }
+        }
         startPolling()
         startDisplayTicker()
         viewModelScope.launch {
@@ -58,7 +71,10 @@ class WatchViewModel(context: Context) : ViewModel() {
     }
 
     fun onExercisePermissionsUpdated() {
-        val payload = latestPayload?.takeIf { it.status == "IN_PROGRESS" } ?: return
+        val payload = latestPayload ?: return
+        if (ongoingSessionMissing) return
+        WorkoutOngoingActivity.update(appContext, payload)
+        if (payload.status != "IN_PROGRESS") return
         if (ExerciseTrackingService.startIfPermitted(appContext, payload.sessionId)) {
             (_state.value as? WatchScreenState.Ready)?.let { ready ->
                 _state.value = ready.copy(error = null)
@@ -289,6 +305,10 @@ class WatchViewModel(context: Context) : ViewModel() {
     }
 
     private fun handleFetchError(error: Throwable) {
+        if (error.message == "session_not_found") {
+            ongoingSessionMissing = true
+            WorkoutOngoingActivity.sessionNotFound(appContext)
+        }
         if (latestPayload == null) {
             _state.value = WatchScreenState.Empty(error.message ?: "Aucune séance active")
             return
@@ -360,6 +380,8 @@ class WatchViewModel(context: Context) : ViewModel() {
             restMutationPending = false
         }
         latestPayload = payload
+        ongoingSessionMissing = false
+        WorkoutOngoingActivity.update(appContext, payload)
         newestRevisionMs = maxOf(newestRevisionMs, incomingRevisionMs)
         if (payload.status == "IN_PROGRESS") {
             val health = exerciseHealth.snapshot.value

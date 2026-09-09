@@ -2,7 +2,8 @@ package com.traknio.watch
 
 import android.os.Bundle
 import android.app.Activity
-import android.view.WindowManager
+import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -10,7 +11,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,6 +32,13 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.wear.compose.foundation.rememberSwipeToDismissBoxState
+import androidx.wear.compose.material.SwipeToDismissBox
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.graphics.Brush
@@ -44,14 +50,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material.Button
@@ -68,6 +72,16 @@ import androidx.compose.runtime.collectAsState
 import com.traknio.watch.R
 
 class MainActivity : ComponentActivity() {
+    override fun onStart() {
+        super.onStart()
+        ExerciseTrackingService.activityVisible = true
+    }
+
+    override fun onStop() {
+        ExerciseTrackingService.activityVisible = false
+        super.onStop()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -93,17 +107,27 @@ private fun TraknioWearApp() {
     val permissionsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         viewModel.onExercisePermissionsUpdated()
     }
-    val activeSessionId = (state as? WatchScreenState.Ready)?.payload?.takeIf { it.status == "IN_PROGRESS" }?.sessionId
+    val activeSessionId = (state as? WatchScreenState.Ready)?.payload
+        ?.takeIf { it.status == "IN_PROGRESS" || it.status == "READY_TO_COMPLETE" }?.sessionId
     LaunchedEffect(activeSessionId) {
         if (activeSessionId == null || activity == null) return@LaunchedEffect
-        val permissions = ExercisePermissions.requiredRuntimePermissions()
+        val healthPermissions = if ((state as? WatchScreenState.Ready)?.payload?.status == "IN_PROGRESS") {
+            ExercisePermissions.requiredRuntimePermissions(targetSdkInt = context.applicationInfo.targetSdkVersion)
+        } else emptyList()
+        val permissions = healthPermissions +
+            if (Build.VERSION.SDK_INT >= 33) listOf(android.Manifest.permission.POST_NOTIFICATIONS) else emptyList()
         val missing = permissions.filter { ContextCompat.checkSelfPermission(activity, it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
         if (missing.isNotEmpty()) permissionsLauncher.launch(missing.toTypedArray())
     }
-    val keepScreenOn = (state as? WatchScreenState.Ready)
-        ?.payload
-        ?.status != "COMPLETED" && state is WatchScreenState.Ready
-    KeepScreenOn(keepScreenOn)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.onExercisePermissionsUpdated()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    BackHandler(enabled = activeSessionId != null) { activity?.moveTaskToBack(true) }
     // Continue the same plain launch presentation while the initial data loads.
     // No extra Activity, timer or splash animation; data loading is unchanged.
     if (state is WatchScreenState.Loading) {
@@ -111,29 +135,21 @@ private fun TraknioWearApp() {
         return
     }
     MaterialTheme {
-        WatchChrome(
-            compact = (state as? WatchScreenState.Ready)?.payload?.status == "COMPLETED",
-        ) {
-            when (val current = state) {
-                WatchScreenState.Loading -> LoadingScreen()
-                is WatchScreenState.Empty -> EmptyScreen(current.message, viewModel::refresh)
-                is WatchScreenState.Ready -> ReadyScreen(current, viewModel)
+        SwipeToDismissBox(
+            state = rememberSwipeToDismissBoxState(),
+            onDismissed = { (activity as? ComponentActivity)?.onBackPressedDispatcher?.onBackPressed() },
+        ) { isBackground ->
+            if (!isBackground) {
+                WatchChrome(
+                    compact = (state as? WatchScreenState.Ready)?.payload?.status == "COMPLETED",
+                ) {
+                    when (val current = state) {
+                        WatchScreenState.Loading -> LoadingScreen()
+                        is WatchScreenState.Empty -> EmptyScreen(current.message, viewModel::refresh)
+                        is WatchScreenState.Ready -> ReadyScreen(current, viewModel)
+                    }
+                }
             }
-        }
-    }
-}
-
-@Composable
-private fun KeepScreenOn(enabled: Boolean) {
-    val activity = LocalContext.current as? Activity
-    DisposableEffect(activity, enabled) {
-        if (enabled) {
-            activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        } else {
-            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        }
-        onDispose {
-            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
 }
@@ -151,15 +167,7 @@ private fun WatchChrome(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            Color(0xFF182F5A),
-                            Color(0xFF0A1328),
-                            Color(0xFF020611),
-                        ),
-                    ),
-                )
+                .background(Color.Black)
                 .padding(
                     horizontal = if (isRound) WearDimensions.roundHorizontalSafe else WearDimensions.rectangularHorizontalSafe,
                     vertical = if (compact) WearDimensions.compactVerticalSafe else if (isRound) WearDimensions.roundVerticalSafe else 24.dp,
@@ -187,7 +195,7 @@ private fun LoadingScreen() {
 
 @Composable
 private fun EmptyScreen(message: String, onRefresh: () -> Unit) {
-    ScalingLazyColumn(
+    WearScalingColumn(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -206,7 +214,6 @@ private fun EmptyScreen(message: String, onRefresh: () -> Unit) {
                 color = Color(0xFFB7C9EA),
                 textAlign = TextAlign.Center,
                 fontSize = 12.sp,
-                maxLines = 3,
             )
         }
         item {
@@ -224,8 +231,11 @@ private fun ReadyScreen(state: WatchScreenState.Ready, viewModel: WatchViewModel
     val isReadyToComplete = payload.status == "READY_TO_COMPLETE"
     val haptics = LocalHapticFeedback.current
     var wasResting by remember { mutableStateOf(isResting) }
-    var destination by remember(payload.sessionId) { mutableStateOf(WorkoutDestination.List) }
-    var detailExerciseIndex by remember(payload.sessionId) { mutableStateOf<Int?>(null) }
+    var destination by rememberSaveable(payload.sessionId) { mutableStateOf(WorkoutDestination.List) }
+    var detailExerciseIndex by rememberSaveable(payload.sessionId) { mutableStateOf<Int?>(null) }
+    BackHandler(enabled = !isCompleted && !isResting && destination != WorkoutDestination.List) {
+        destination = if (destination == WorkoutDestination.Set) WorkoutDestination.Detail else WorkoutDestination.List
+    }
 
     LaunchedEffect(isResting) {
         if (isResting && !wasResting) {
@@ -263,7 +273,7 @@ private fun WorkoutListScreen(payload: WatchPayload, enabled: Boolean, onExercis
     key(payload.sessionId, exercises.size, activeItemIndex) {
         val listState = rememberScalingLazyListState(initialCenterItemIndex = activeItemIndex)
         Box(modifier = Modifier.fillMaxSize()) {
-            ScalingLazyColumn(
+            WearScalingColumn(
                 modifier = Modifier.fillMaxSize().padding(top = 20.dp),
                 state = listState,
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -274,12 +284,12 @@ private fun WorkoutListScreen(payload: WatchPayload, enabled: Boolean, onExercis
             Chip(
                 modifier = Modifier
                     .fillMaxWidth(WearDimensions.workoutListWidthFraction)
-                    .height(if (active) WearDimensions.activeListCardHeight else WearDimensions.listCardHeight)
+                    .heightIn(min = if (active) WearDimensions.activeListCardHeight else WearDimensions.listCardHeight)
                     .padding(vertical = 2.dp),
                 label = {
                     Column(modifier = Modifier.padding(vertical = 2.dp)) {
-                        Text(compactWearExerciseName(exercise.name), maxLines = 1, overflow = TextOverflow.Ellipsis, style = WearTypography.title.copy(fontSize = if (active) 13.sp else 11.sp, fontWeight = if (active) FontWeight.Black else FontWeight.Bold))
-                        Text(if (complete) "✓ ${exercise.completedSets}/${exercise.totalSets}" else if (active) "● ${exercise.completedSets}/${exercise.totalSets} · ${exercise.weight?.let { "${trimWeight(it)} kg" } ?: "charge libre"}" else "○ ${exercise.completedSets}/${exercise.totalSets}", color = if (active) Color(0xFFBFE6FF) else Color(0xFF8E9BB3), fontSize = 9.sp)
+                        Text(compactWearExerciseName(exercise.name), style = WearTypography.title.copy(fontSize = if (active) 13.sp else 12.sp, fontWeight = if (active) FontWeight.Black else FontWeight.Bold))
+                        Text(if (complete) "✓ ${exercise.completedSets}/${exercise.totalSets}" else if (active) "● ${exercise.completedSets}/${exercise.totalSets} · ${exercise.weight?.let { "${trimWeight(it)} kg" } ?: "charge libre"}" else "○ ${exercise.completedSets}/${exercise.totalSets}", color = if (active) Color(0xFFBFE6FF) else Color(0xFF8E9BB3), fontSize = 12.sp)
                     }
                 },
                 colors = ChipDefaults.chipColors(backgroundColor = if (active) Color(0xFF163967) else Color(0xFF0C1629), contentColor = Color.White),
@@ -289,7 +299,7 @@ private fun WorkoutListScreen(payload: WatchPayload, enabled: Boolean, onExercis
         }
                 item { Spacer(Modifier.height(8.dp)) }
             }
-            Text("SÉANCE  ${exercises.count { it.completedSets >= it.totalSets }}/${payload.totalExercises}", modifier = Modifier.align(Alignment.TopCenter), color = Color(0xFFBFE6FF), style = WearTypography.accent.copy(fontSize = 11.sp))
+            Text("SÉANCE  ${exercises.count { it.completedSets >= it.totalSets }}/${payload.totalExercises}", modifier = Modifier.align(Alignment.TopCenter), color = Color(0xFFBFE6FF), style = WearTypography.accent.copy(fontSize = 12.sp))
         }
     }
 }
@@ -299,14 +309,18 @@ private fun ExerciseDetailScreen(payload: WatchPayload, selectedIndex: Int?, ena
     val exercise = payload.exercises.firstOrNull { it.index == selectedIndex }
         ?: payload.exercises.getOrNull(payload.exerciseIndex - 1)
     val title = compactWearExerciseName(exercise?.name ?: payload.exerciseName)
-    val hasLongTitle = title.length > 30
-    Box(modifier = Modifier.fillMaxSize()) {
-    ScalingLazyColumn(modifier = Modifier.fillMaxSize().padding(top = if (hasLongTitle) 48.dp else 52.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    WearScalingColumn(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+        item {
+            ActionChip("‹ Séance", onClick = onBack, enabled = enabled)
+        }
+        item {
+            Text(title, textAlign = TextAlign.Center, style = WearTypography.title)
+        }
         items((1..(exercise?.totalSets ?: payload.totalSets)).toList()) { set ->
             val done = set <= (exercise?.completedSets ?: 0)
             val active = set == (exercise?.activeSetIndex ?: payload.setIndex)
             Chip(
-                modifier = Modifier.fillMaxWidth(WearDimensions.contentWidthFraction).height(WearDimensions.setRowHeight).padding(vertical = 2.dp),
+                modifier = Modifier.fillMaxWidth(WearDimensions.contentWidthFraction).heightIn(min = WearDimensions.setRowHeight),
                 label = { Text("S$set   ${exercise?.targetReps ?: payload.targetReps} × ${exercise?.weight?.let { "${trimWeight(it)} kg" } ?: "—"}   ${if (done) "✓" else if (active) "●" else "○"}", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, fontSize = 12.sp, fontWeight = if (active) FontWeight.Black else FontWeight.Medium) },
                 colors = ChipDefaults.chipColors(backgroundColor = if (active) Color(0xFF163967) else Color(0xFF0C1629), contentColor = Color.White),
                 enabled = enabled && active,
@@ -314,24 +328,19 @@ private fun ExerciseDetailScreen(payload: WatchPayload, selectedIndex: Int?, ena
             )
         }
     }
-        Column(modifier = Modifier.align(Alignment.TopCenter), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("‹  Séance", modifier = Modifier.height(if (hasLongTitle) 25.dp else 28.dp).clickable(enabled = enabled, onClick = onBack), color = Color(0xFF9CCBFF), style = WearTypography.accent.copy(fontSize = 10.sp))
-            Text(title, textAlign = TextAlign.Center, style = WearTypography.title.copy(fontSize = if (hasLongTitle) 13.sp else 14.sp, lineHeight = if (hasLongTitle) 14.sp else 16.sp), maxLines = 2, overflow = TextOverflow.Ellipsis)
-        }
-    }
 }
 
 @Composable
 private fun ReadyToCompleteScreen(state: WatchScreenState.Ready, viewModel: WatchViewModel) {
     val enabled = state.busyAction == null
-    Column(
+    WearScrollColumn(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Text("Séance", fontSize = 18.sp, color = Color(0xFFB7C9EA))
         Text("complète", fontSize = 25.sp, fontWeight = FontWeight.Black)
-        if (state.error != null) Text(state.error, color = Color(0xFFFFB86B), fontSize = 10.sp)
+        if (state.error != null) Text(state.error, color = Color(0xFFFFB86B), fontSize = 12.sp)
         Spacer(Modifier.height(10.dp))
         BigActionButton(if (state.busyAction == "finish") "..." else "Terminer la séance", enabled, viewModel::completeSession)
     }
@@ -342,9 +351,10 @@ private fun ActiveSetScreen(state: WatchScreenState.Ready, viewModel: WatchViewM
     val payload = state.payload
     val enabled = state.busyAction == null
     val initialWeight = (payload.weight ?: payload.activeWeight ?: 0.0).coerceAtLeast(0.0)
-    var reps by remember(payload.sessionId, payload.exerciseIndex, payload.setIndex) { mutableStateOf(payload.targetReps) }
-    var weight by remember(payload.sessionId, payload.exerciseIndex, payload.setIndex) { mutableStateOf(initialWeight) }
-    var editor by remember { mutableStateOf<SetEditor?>(null) }
+    var reps by rememberSaveable(payload.sessionId, payload.exerciseIndex, payload.setIndex) { mutableStateOf(payload.targetReps) }
+    var weight by rememberSaveable(payload.sessionId, payload.exerciseIndex, payload.setIndex) { mutableStateOf(initialWeight) }
+    var editor by rememberSaveable { mutableStateOf<SetEditor?>(null) }
+    BackHandler(enabled = editor != null) { editor = null }
 
     // A phone update changes the payload without changing the active set key. Keep the
     // displayed target aligned with that authoritative payload, except while the wearer
@@ -415,7 +425,7 @@ private fun ActiveSetContent(
     onValidate: () -> Unit,
     onBack: () -> Unit = {},
 ) {
-    Column(
+    WearScrollColumn(
         // WatchChrome already reserves the round safe area and the TimeText. Adding a second
         // vertical inset here reduced the real XL-round content area below 180 dp.
         modifier = Modifier.fillMaxSize(),
@@ -426,28 +436,12 @@ private fun ActiveSetContent(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Keep the header compact for two-line names, but place a transparent 48 dp
-            // hit region behind it so the wearer never has to target only the glyphs.
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.96f)
-                    .height(12.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.70f)
-                        .height(48.dp)
-                        .offset(y = 12.dp)
-                        .clickable(onClick = onBack),
-                )
-                Text("‹  Séries", color = Color(0xFF9CCBFF), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-            }
+            ActionChip("‹ Séries", onClick = onBack, enabled = enabled)
             WearExerciseTitle(exerciseName)
             Text(
                 text = "SÉRIE $setIndex/$totalSets",
                 color = Color(0xFFBFE6FF),
-                fontSize = 9.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 2.dp).background(Color(0x332E8BFF), RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 2.dp),
             )
@@ -465,14 +459,14 @@ private fun ActiveSetContent(
                 value = if (isBodyweight && weight <= 0) "CORPS" else trimWeight(weight),
                 enabled = enabled,
                 onClick = onEditWeight,
-                modifier = Modifier.width(72.dp),
+                modifier = Modifier.weight(1f),
             )
             SetValueTarget(
                 label = "RÉPÉTITIONS",
                 value = reps.toString(),
                 enabled = enabled,
                 onClick = onEditReps,
-                modifier = Modifier.width(72.dp),
+                modifier = Modifier.weight(1f),
             )
         }
 
@@ -481,7 +475,7 @@ private fun ActiveSetContent(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (error != null) {
-                Text(error, color = Color(0xFFFFB86B), fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(error, color = Color(0xFFFFB86B), fontSize = 12.sp, textAlign = TextAlign.Center)
             }
             BigActionButton("VALIDER", enabled = enabled, onClick = onValidate)
         }
@@ -497,7 +491,7 @@ private fun SetValueTarget(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, color = Color(0xFF9EAFCC), style = WearTypography.label.copy(fontSize = 8.sp), maxLines = 1)
+        Text(label, color = Color(0xFF9EAFCC), style = WearTypography.label.copy(fontSize = 12.sp), textAlign = TextAlign.Center)
         Button(
             modifier = Modifier.fillMaxWidth().height(66.dp),
             enabled = enabled,
@@ -531,12 +525,12 @@ private fun ValueEditorScreen(
     val haptics = LocalHapticFeedback.current
     val displayedValue = trimWeight(value)
     val valueFontSize = if (displayedValue.length > 3) 46.sp else 54.sp
-    Column(
+    WearScrollColumn(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(label, color = Color(0xFF9CCBFF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = Color(0xFF9CCBFF), fontSize = 12.sp, fontWeight = FontWeight.Bold)
         Box(
             modifier = Modifier
                 .width(if (displayedValue.length > 3) 118.dp else 84.dp)
@@ -572,7 +566,7 @@ private fun ValueEditorScreen(
 @Composable
 private fun EditorStepButton(text: String, onClick: () -> Unit) {
     Button(
-        modifier = Modifier.size(width = 76.dp, height = 48.dp),
+        modifier = Modifier.size(width = 68.dp, height = 48.dp),
         colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF152C56), contentColor = Color.White),
         onClick = onClick,
     ) { Text(text, style = WearTypography.action.copy(fontSize = 13.sp)) }
@@ -609,7 +603,7 @@ private fun RestScreenContent(
     onAddRest: () -> Unit,
     onSkipRest: () -> Unit,
 ) {
-    Column(
+    WearScrollColumn(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -618,7 +612,7 @@ private fun RestScreenContent(
         Spacer(Modifier.height(2.dp))
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Respire", color = Color(0xFFB7C9EA), fontSize = 11.sp)
+            Text("Respire", color = Color(0xFFB7C9EA), fontSize = 12.sp)
             Text(
                 text = formatRest(remainingSeconds),
                 fontSize = if (remainingSeconds >= 60) 40.sp else 48.sp,
@@ -628,9 +622,7 @@ private fun RestScreenContent(
             Text(
                 text = if (isPaused) "Chrono en pause" else compactWearExerciseName(exerciseName),
                 color = Color(0xFFB7C9EA),
-                fontSize = 9.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                fontSize = 12.sp,
                 textAlign = TextAlign.Center,
             )
         }
@@ -666,7 +658,7 @@ private fun CompactRestSkipChip(text: String, onClick: () -> Unit, enabled: Bool
             Text(
                 text = text,
                 modifier = Modifier.fillMaxWidth(),
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
             )
@@ -876,7 +868,7 @@ private fun RepetitionsEditorRoundPreview() {
 private fun CompletedScreen(state: WatchScreenState.Ready, onRefresh: () -> Unit) {
     val activity = LocalContext.current as? Activity
     val summary = state.payload.summary
-    ScalingLazyColumn(
+    WearScalingColumn(
         modifier = Modifier
             .fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -896,7 +888,7 @@ private fun CompletedScreen(state: WatchScreenState.Ready, onRefresh: () -> Unit
             Text(
                 text = "SÉANCE TERMINÉE",
                 color = Color(0xFFB7C9EA),
-                fontSize = 8.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Black,
             )
         }
@@ -907,9 +899,7 @@ private fun CompletedScreen(state: WatchScreenState.Ready, onRefresh: () -> Unit
                 textAlign = TextAlign.Center,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Black,
-                maxLines = 2,
                 lineHeight = 15.sp,
-                overflow = TextOverflow.Ellipsis,
             )
         }
         item {
@@ -917,13 +907,13 @@ private fun CompletedScreen(state: WatchScreenState.Ready, onRefresh: () -> Unit
                 text = "+${summary?.xpGained ?: 100} XP",
                 modifier = Modifier.padding(top = 2.dp),
                 color = Color(0xFFC9B5FF),
-                fontSize = 9.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
             )
         }
         if (state.error != null) {
             item {
-                Text(state.error, color = Color(0xFFFFB86B), fontSize = 8.sp, modifier = Modifier.padding(top = 1.dp))
+                Text(state.error, color = Color(0xFFFFB86B), fontSize = 12.sp, modifier = Modifier.padding(top = 1.dp))
             }
         }
         if (summary != null) {
@@ -934,18 +924,18 @@ private fun CompletedScreen(state: WatchScreenState.Ready, onRefresh: () -> Unit
                 Text(
                     text = "${summary.sets} séries réalisées",
                     color = Color(0xFF8E9BB3),
-                    fontSize = 8.sp,
+                    fontSize = 12.sp,
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
             if (summary.levelReached) {
                 item {
-                    Text("Niveau ${summary.level} atteint", color = Color(0xFFC9B5FF), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                    Text("Niveau ${summary.level} atteint", color = Color(0xFFC9B5FF), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         } else {
             item {
-                Text("Synthèse en cours...", color = Color(0xFFB7C9EA), fontSize = 10.sp, textAlign = TextAlign.Center)
+                Text("Synthèse en cours...", color = Color(0xFFB7C9EA), fontSize = 12.sp, textAlign = TextAlign.Center)
             }
         }
         item {
@@ -982,14 +972,14 @@ private fun SummaryGrid(summary: WatchSessionSummary) {
                 iconColor = Color(0xFF00E0FF),
                 value = "${summary.exercises}",
                 label = "EXERCICES",
-                modifier = Modifier.width(72.dp),
+                modifier = Modifier.weight(1f),
             )
             SummaryCell(
                 icon = R.drawable.ic_summary_volume,
                 iconColor = Color(0xFF00C7FF),
                 value = "${formatFrenchNumber(summary.volumeKg)} kg",
                 label = "VOLUME",
-                modifier = Modifier.width(72.dp),
+                modifier = Modifier.weight(1f),
             )
         }
         Row(
@@ -1003,7 +993,7 @@ private fun SummaryGrid(summary: WatchSessionSummary) {
                 iconColor = Color(0xFFFF4D88),
                 value = summary.averageHeartRateBpm?.toString() ?: "—",
                 label = "FC MOY.",
-                modifier = Modifier.width(72.dp),
+                modifier = Modifier.weight(1f),
             )
             SummaryCell(
                 icon = null,
@@ -1011,7 +1001,7 @@ private fun SummaryGrid(summary: WatchSessionSummary) {
                 iconColor = Color(0xFF00E0FF),
                 value = formatDuration(summary.durationSeconds),
                 label = "DURÉE",
-                modifier = Modifier.width(72.dp),
+                modifier = Modifier.weight(1f),
             )
         }
         summary.sessionCaloriesKcal?.let { calories ->
@@ -1050,20 +1040,20 @@ private fun SummaryCell(
         } else {
             Text(iconText.orEmpty(), color = iconColor, fontSize = 12.sp, fontWeight = FontWeight.Black)
         }
-        Text(value, color = Color.White, fontSize = if (value.length > 6) 12.sp else 14.sp, fontWeight = FontWeight.Black, maxLines = 1)
-        Text(label, color = Color(0xFF8E9BB3), fontSize = 7.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(value, color = Color.White, fontSize = if (value.length > 6) 12.sp else 14.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
+        Text(label, color = Color(0xFF8E9BB3), fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
     }
 }
 
 @Composable
 private fun FinalActionChip(onClick: () -> Unit, enabled: Boolean) {
     Chip(
-        modifier = Modifier.width(142.dp).height(WearDimensions.minimumActionHeight),
+        modifier = Modifier.width(142.dp).heightIn(min = WearDimensions.minimumActionHeight),
         label = {
             Text(
                 text = "Terminer",
                 modifier = Modifier.fillMaxWidth(),
-                fontSize = 10.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
             )
@@ -1084,8 +1074,6 @@ private fun WearExerciseTitle(title: String) {
             text = compactWearExerciseName(title),
             modifier = Modifier.fillMaxWidth(0.78f),
             textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
             fontSize = 13.sp,
             fontWeight = FontWeight.Black,
             lineHeight = 14.sp,
@@ -1097,7 +1085,7 @@ private fun WearExerciseTitle(title: String) {
 private fun WearScreenLabel(title: String, error: String?) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(title, fontSize = 14.sp, fontWeight = FontWeight.Black)
-        if (error != null) Text(error, color = Color(0xFFFFB86B), fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (error != null) Text(error, color = Color(0xFFFFB86B), fontSize = 12.sp, textAlign = TextAlign.Center)
     }
 }
 
@@ -1174,7 +1162,7 @@ private fun WearValueButton(text: String, enabled: Boolean, onClick: () -> Unit,
 private fun RoundActionButton(text: String, enabled: Boolean, onClick: () -> Unit) {
     val haptics = LocalHapticFeedback.current
     Button(
-        modifier = Modifier.size(width = 54.dp, height = 34.dp),
+        modifier = Modifier.size(48.dp),
         enabled = enabled,
         colors = ButtonDefaults.buttonColors(
             backgroundColor = Color(0xFF152C56),
@@ -1186,7 +1174,7 @@ private fun RoundActionButton(text: String, enabled: Boolean, onClick: () -> Uni
             onClick()
         },
     ) {
-        Text(text, fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Text(text, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
     }
 }
 
@@ -1194,7 +1182,7 @@ private fun RoundActionButton(text: String, enabled: Boolean, onClick: () -> Uni
 private fun SmallButton(text: String, enabled: Boolean, danger: Boolean = false, onClick: () -> Unit) {
     val haptics = LocalHapticFeedback.current
     Button(
-        modifier = Modifier.size(38.dp),
+        modifier = Modifier.size(48.dp),
         enabled = enabled,
         colors = ButtonDefaults.buttonColors(
             backgroundColor = if (danger) Color(0xFF7F1D1D) else Color(0xFF12264A),
@@ -1206,7 +1194,7 @@ private fun SmallButton(text: String, enabled: Boolean, danger: Boolean = false,
             onClick()
         },
     ) {
-        Text(text, fontSize = 8.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Text(text, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
     }
 }
 

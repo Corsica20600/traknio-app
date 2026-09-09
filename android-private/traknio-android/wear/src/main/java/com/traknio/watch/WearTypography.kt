@@ -30,7 +30,7 @@ object WearTypography {
 
     val display = TextStyle(fontFamily = exo2SemiBold, fontWeight = FontWeight.SemiBold, fontSize = 40.sp, lineHeight = 40.sp)
     val title = TextStyle(fontFamily = ralewaySemiBold, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 16.sp)
-    val label = TextStyle(fontFamily = exo2Regular, fontWeight = FontWeight.Normal, fontSize = 8.sp, letterSpacing = 0.8.sp)
-    val action = TextStyle(fontFamily = exo2SemiBold, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, letterSpacing = 0.3.sp)
-    val accent = TextStyle(fontFamily = orbitronMedium, fontWeight = FontWeight.Medium, fontSize = 9.sp, letterSpacing = 1.sp)
+    val label = TextStyle(fontFamily = exo2Regular, fontWeight = FontWeight.Normal, fontSize = 12.sp, letterSpacing = 0.8.sp)
+    val action = TextStyle(fontFamily = exo2SemiBold, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, letterSpacing = 0.3.sp)
+    val accent = TextStyle(fontFamily = orbitronMedium, fontWeight = FontWeight.Medium, fontSize = 12.sp, letterSpacing = 1.sp)
 }

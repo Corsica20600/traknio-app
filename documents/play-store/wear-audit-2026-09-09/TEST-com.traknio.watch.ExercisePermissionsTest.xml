@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.traknio.watch.ExercisePermissionsTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-09T13:50:04.613Z" hostname="ERWAN-NITRO" time="0.105">
+  <properties/>
+  <testcase name="future target 36 uses granular heart rate permission" classname="com.traknio.watch.ExercisePermissionsTest" time="0.104"/>
+  <testcase name="api 35 requires body sensors and activity recognition" classname="com.traknio.watch.ExercisePermissionsTest" time="0.0"/>
+  <testcase name="target 35 on api 36 retains the legacy sensor permission" classname="com.traknio.watch.ExercisePermissionsTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

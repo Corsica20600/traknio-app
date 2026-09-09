@@ -22,6 +22,8 @@ class WatchWearListenerService : WearableListenerService() {
                 Log.d(TAG, "workout_state_wear_received t=${System.currentTimeMillis()} action=${state.action ?: "confirmed"} revision=${state.revision.takeLast(24)} session=${state.sessionId.takeLast(8)}")
             }
             WatchWorkoutStateDataLayer.receive(applicationContext, state)
+            // Presentation-only hook: cleanup still works when no ViewModel is alive.
+            WorkoutOngoingActivity.receive(applicationContext, state)
             return
         }
         if (messageEvent.path != WearPairingPaths.ACCOUNT_STATE) return
@@ -48,6 +50,13 @@ class WatchWearListenerService : WearableListenerService() {
             }.getOrNull() ?: return@forEach
             WatchRelayResultStore.save(applicationContext, result)
             WatchRelayEvents.emit(result)
+            if (result.state == "COMPLETED") {
+                result.payload?.let { json ->
+                    runCatching { WatchPayloadJson.parse(json) }.getOrNull()?.let {
+                        WorkoutOngoingActivity.receive(applicationContext, it)
+                    }
+                }
+            }
             Log.i(TAG, "watch relay result stored request=${result.requestId.takeLast(8)} state=${result.state}")
         }
     }

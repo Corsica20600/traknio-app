@@ -11,8 +11,8 @@ import androidx.compose.ui.unit.dp
 internal object WearDimensions {
     val roundHorizontalSafe: Dp = 19.dp
     val rectangularHorizontalSafe: Dp = 18.dp
-    val roundVerticalSafe: Dp = 24.dp
-    val compactVerticalSafe: Dp = 10.dp
+    val roundVerticalSafe: Dp = 32.dp
+    val compactVerticalSafe: Dp = 32.dp
 
     val listCardHeight: Dp = 52.dp
     val activeListCardHeight: Dp = 58.dp

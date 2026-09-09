@@ -13,10 +13,10 @@ import androidx.core.content.ContextCompat
  * also makes it the gate for the health foreground service.
  */
 object ExercisePermissions {
-    fun requiredRuntimePermissions(sdkInt: Int = Build.VERSION.SDK_INT): List<String> = buildList {
-        // The Wear OS 6 granular health permission is deliberately kept here so this
-        // gate remains correct when the module moves to targetSdk 36.
-        if (sdkInt >= 36) {
+    fun requiredRuntimePermissions(sdkInt: Int = Build.VERSION.SDK_INT, targetSdkInt: Int = 35): List<String> = buildList {
+        // The granular migration depends on BOTH the device and the app target.
+        // Its manifest declarations must be added together with a future target 36 bump.
+        if (sdkInt >= 36 && targetSdkInt >= 36) {
             add("android.permission.health.READ_HEART_RATE")
         } else {
             add(android.Manifest.permission.BODY_SENSORS)
@@ -25,7 +25,7 @@ object ExercisePermissions {
     }
 
     fun hasRequiredPermissions(context: Context): Boolean =
-        requiredRuntimePermissions().all {
+        requiredRuntimePermissions(targetSdkInt = context.applicationInfo.targetSdkVersion).all {
             ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
         }
 }

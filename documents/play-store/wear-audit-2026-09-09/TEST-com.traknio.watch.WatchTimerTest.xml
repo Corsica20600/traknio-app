@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.traknio.watch.WatchTimerTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-09-09T13:50:04.721Z" hostname="ERWAN-NITRO" time="0.026">
+  <properties/>
+  <testcase name="a newer shared rest snapshot is accepted" classname="com.traknio.watch.WatchTimerTest" time="0.026"/>
+  <testcase name="an older shared rest snapshot cannot overwrite a newer local state" classname="com.traknio.watch.WatchTimerTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
