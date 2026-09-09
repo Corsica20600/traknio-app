@@ -1,11 +1,11 @@
 **Audit Traknio Wear OS — 9 septembre 2026 — candidat 0.5.8 (29)**
 
-**Candidat 29 : build, tests, audit AAB et parcours Galaxy Watch Ultra PASS. AAB 29 accepté dans Play Console ; NON SOUMIS à ce stade : la vue de publication regroupe aussi deux changements mobiles préexistants, dont le déploiement du téléphone 27, sans exclusion disponible.** Le build local complet du candidat 29, ses 18 tests JUnit release et le lint (0 erreur, 24 avertissements, 2 indications) ont réussi. Les avertissements WearRecents et StaticFieldLeak de l'ajout sont résolus. Restent principalement les suggestions de mise à jour des dépendances, des conseils KTX et l'icône launcher non circulaire existante (splash conservé conformément à la demande).
+**Candidat 29 : build, tests, audit AAB et parcours Galaxy Watch Ultra PASS. AAB 29 accepté dans Play Console ; SOUMIS EN EXAMEN le 9 septembre 2026. Les sept changements groupés, y compris les deux changements mobiles préexistants, ont été explicitement autorisés par le propriétaire avant confirmation finale.** Le build local complet du candidat 29, ses 18 tests JUnit release et le lint (0 erreur, 24 avertissements, 2 indications) ont réussi. Les avertissements WearRecents et StaticFieldLeak de l'ajout sont résolus. Restent principalement les suggestions de mise à jour des dépendances, des conseils KTX et l'icône launcher non circulaire existante (splash conservé conformément à la demande).
 
 AAB livré : `documents/play-store/Traknio-wear-0.5.8-29.aab`.
 APK pour test manuel : `documents/play-store/Traknio-wear-0.5.8-29.apk`.
 SHA-256 AAB : `cbc4921181f3da865ad347dbfa4f20f705264e61d45617d370028fcd8dcc7d57`.
-Le manifest fusionné 29, les rapports JUnit/lint et l'inspection de l'artefact sont enregistrés dans `wear-audit-2026-09-09/`. Signature vérifiée et zipalign APK 16 KB réussi. Le 9 septembre, le propriétaire confirme le parcours physique réussi sur Galaxy Watch Ultra, avec versionCode=29/minSdk=30/targetSdk=35 vérifiés par ADB. Ces résultats physiques sont rapportés par le propriétaire ; Codex a revérifié les rapports locaux et le véritable AAB. Pendant la finalisation, Codex a personnellement confirmé par ADB le candidat 29 / 0.5.8 sur la Galaxy Watch Ultra SM-L705F, puis capturé trois écrans réels 480×480. Le parcours complet Ongoing Activity reste attesté par le propriétaire, sans le présenter comme une nouvelle exécution intégrale par Codex. La soumission reste conditionnée aux contrôles Play Console.
+Le manifest fusionné 29, les rapports JUnit/lint et l'inspection de l'artefact sont enregistrés dans `wear-audit-2026-09-09/`. Signature vérifiée et zipalign APK 16 KB réussi. Le 9 septembre, le propriétaire confirme le parcours physique réussi sur Galaxy Watch Ultra, avec versionCode=29/minSdk=30/targetSdk=35 vérifiés par ADB. Ces résultats physiques sont rapportés par le propriétaire ; Codex a revérifié les rapports locaux et le véritable AAB. Pendant la finalisation, Codex a personnellement confirmé par ADB le candidat 29 / 0.5.8 sur la Galaxy Watch Ultra SM-L705F, puis capturé trois écrans réels 480×480. Le parcours complet Ongoing Activity reste attesté par le propriétaire, sans le présenter comme une nouvelle exécution intégrale par Codex. Les contrôles rapides Play sont terminés ; le statut final « Vos modifications sont en cours d’examen » a été constaté après soumission.
 
 Le téléphone reste configuré en **27 / 0.5.8**. Les modifications préexistantes du dépôt ont été conservées : comparaison de chaque section du diff initial avec le diff final, aucune section préexistante modifiée par cet audit. Le backend, Health Connect téléphone, les fichiers de transport Data Layer, les intervalles de polling, les mutations de séance et les données existantes n'ont pas été modifiés.
 
@@ -94,16 +94,16 @@ La source officielle Wear confirme le **15 septembre 2026 pour le 64 bits**. La 
 
 **Play Console — finalisation du 9 septembre 2026**
 
-29 était libre (inventaire initial : codes 7 à 28). Le véritable AAB 29 a maintenant été importé avec succès dans la production Wear, release 4, nom `29 (0.5.8)`. Le bundle 28 est explicitement non inclus et aucun ancien bundle n'est conservé dans cette release. 81 appareils compatibles, aucun appareil perdu. La release est enregistrée dans la vue de publication, pas encore envoyée pour examen.
+29 était libre (inventaire initial : codes 7 à 28). Le véritable AAB 29 a maintenant été importé avec succès dans la production Wear, release 4, nom `29 (0.5.8)`. Le bundle 28 est explicitement non inclus et aucun ancien bundle n'est conservé dans cette release. 81 appareils compatibles, aucun appareil perdu. La release est envoyée et figure dans « Modifications en cours d’examen » dans la vue de publication.
 
 | Section | Classement et preuve / intervention |
 | --- | --- |
 | Production Wear | OK : AAB 29 accepté, min 30/target 35, quatre ABI, notes françaises enregistrées. Aucune erreur dans l'examen de la release ; deux avertissements de diagnostic ci-dessous. |
 | Versions / bundles | OK : 29 nouvel artefact, distinct du 28 ; hash local revérifié après import. |
 | Tests internes Wear 10 | CORRIGÉ : canal suspendu, état Inactif constaté. Action réversible, effet immédiat indiqué par Play. Aucune suppression de release publiée. |
-| Tests fermés Alpha Wear 24 | CORRIGÉ : suspension enregistrée, état Inactif constaté ; changement encore à envoyer pour examen dans la vue de publication. |
+| Tests fermés Alpha Wear 24 | CORRIGÉ : suspension enregistrée, état Inactif constaté ; changement envoyé pour examen avec les six autres éléments. |
 | Historique Wear 28 | CONSERVÉ : rejet historique conservé ; artefact exclu de la nouvelle release. Aucune destruction d'historique. |
-| Téléphone / Alpha mobile | INCHANGÉS : demande préexistante de déploiement production 27 et suspension Alpha mobile présentes dans la vue de publication. Aucun nouvel artefact, aucune édition de ces canaux. Leur inclusion automatique empêche une soumission limitée au Wear sans clarification. |
+| Téléphone / Alpha mobile | INCHANGÉS : demande préexistante de déploiement production 27 et suspension Alpha mobile présentes dans la vue de publication. Aucun nouvel artefact, aucune édition de ces canaux. Le propriétaire a explicitement autorisé leur envoi groupé avec le Wear 29. Le binaire téléphone reste 27 / 0.5.8 sans autre modification. |
 | Facteurs de forme | OK : Wear OS actif, distribution distincte. |
 | Android XR | OK : actif avec le canal et les artefacts mobiles, aucun canal XR Wear accidentel. Configuration conservée. |
 | Applis de santé | CORRIGÉ : justification BODY_SENSORS corrigée (fréquence cardiaque Health Services, pas calories Samsung Health) et ACTIVITY_RECOGNITION précisée (calories de séance, aucun pas/cadence dans Wear 29). Déclarations Health Connect téléphone conservées. |
@@ -116,7 +116,7 @@ La source officielle Wear confirme le **15 septembre 2026 pour le 64 bits**. La 
 | Conformité aux règles | Rejet historique « Activité en cours manquante » du 9 septembre encore affiché. Play indique que les modifications peuvent le résoudre et invite à les envoyer pour examen. Aucune nouvelle décision de Google sur le 29 à ce stade. |
 | Qualité technique | Aucun résultat Android Vitals disponible pour le candidat. Recommandation sur l'obfuscation de l'ancien téléphone 23 conservée sans changement du téléphone. |
 | Pré-lancement | NON DISPONIBLE : aucun rapport présenté lors du contrôle. Ne constitue pas un test PASS du candidat. |
-| Vue de publication | À CORRIGER / clarifier : sept changements regroupés, dont deux mobiles hors périmètre. Boutons « Enregistrer pour plus tard » désactivés ; menu du téléphone limité à « View change ». Vérifications rapides en cours lors du contrôle. Aucun clic d'envoi final. |
+| Vue de publication | OK : contrôles rapides terminés, sept changements envoyés après autorisation explicite. Statut final constaté : « Vos modifications sont en cours d’examen ». Publication gérée toujours activée. |
 
 Les sept changements sont : production mobile 27, suspension Alpha mobile (tous deux préexistants), production Wear 29, suspension Alpha Wear, captures Wear fr-FR, sécurité des données et santé. Les instructions reviewer sont affichées séparément parmi les informations prises en compte pour l'examen. Publication gérée activée et conservée.
 
@@ -127,7 +127,9 @@ Notes enregistrées :
 > Correction et amélioration de l’expérience Wear OS.
 > Amélioration du suivi des séances actives, de la navigation et de la compatibilité avec les exigences Wear OS.
 
-**Statut : NON SOUMIS.** Le candidat technique est validé et chargé ; la soumission groupée du téléphone 27 et de la suspension Alpha mobile nécessite une clarification, compte tenu de l'interdiction explicite de toucher au téléphone. Aucun changement mobile n'a été supprimé pour contourner cette limite. L'aide officielle décrit l'exclusion avec « Enregistrer pour plus tard », mais cette option est désactivée dans l'état actuel observé : https://support.google.com/googleplay/android-developer/answer/9859654?hl=fr.
+**Statut : SOUMIS EN EXAMEN.** Le 9 septembre 2026, après la fin des contrôles rapides sans erreur bloquante, Codex a cliqué sur « Envoyer 7 modifications pour examen », puis confirmé « Envoi des modifications pour examen ». Une vérification transitoire a ensuite disparu ; le message final est « Vos modifications sont en cours d’examen ». Les sept éléments listés ci-dessus figurent dans cette section. Le propriétaire avait explicitement autorisé les deux changements mobiles préexistants (« oui », puis confirmation d’attendre les contrôles et de soumettre l’ensemble), sans autre modification téléphone. Publication gérée conservée : l’envoi pour examen ne signifie ni approbation Google ni publication effective. Aucun clic de publication effectué.
+
+Le commit de préparation `0ea22e909d834a8743d8e67a08410596429ace90` a été poussé et vérifié sur `origin/main` avant cet envoi. Cette mise à jour documentaire enregistre son résultat.
 
 **Tests et livraison**
 
