@@ -1,11 +1,11 @@
 **Audit Traknio Wear OS — 9 septembre 2026 — candidat 0.5.8 (29)**
 
-**Candidat 29 : build, tests, audit AAB et parcours Galaxy Watch Ultra PASS. Vérification Play Console en cours ; aucune soumission à ce stade.** Le build local complet du candidat 29, ses 18 tests JUnit release et le lint (0 erreur, 24 avertissements, 2 indications) ont réussi. Les avertissements WearRecents et StaticFieldLeak de l'ajout sont résolus. Restent principalement les suggestions de mise à jour des dépendances, des conseils KTX et l'icône launcher non circulaire existante (splash conservé conformément à la demande).
+**Candidat 29 : build, tests, audit AAB et parcours Galaxy Watch Ultra PASS. AAB 29 accepté dans Play Console ; NON SOUMIS à ce stade : la vue de publication regroupe aussi deux changements mobiles préexistants, dont le déploiement du téléphone 27, sans exclusion disponible.** Le build local complet du candidat 29, ses 18 tests JUnit release et le lint (0 erreur, 24 avertissements, 2 indications) ont réussi. Les avertissements WearRecents et StaticFieldLeak de l'ajout sont résolus. Restent principalement les suggestions de mise à jour des dépendances, des conseils KTX et l'icône launcher non circulaire existante (splash conservé conformément à la demande).
 
 AAB livré : `documents/play-store/Traknio-wear-0.5.8-29.aab`.
 APK pour test manuel : `documents/play-store/Traknio-wear-0.5.8-29.apk`.
 SHA-256 AAB : `cbc4921181f3da865ad347dbfa4f20f705264e61d45617d370028fcd8dcc7d57`.
-Le manifest fusionné 29, les rapports JUnit/lint et l'inspection de l'artefact sont enregistrés dans `wear-audit-2026-09-09/`. Signature vérifiée et zipalign APK 16 KB réussi. Le 9 septembre, le propriétaire confirme le parcours physique réussi sur Galaxy Watch Ultra, avec versionCode=29/minSdk=30/targetSdk=35 vérifiés par ADB. Ces résultats physiques sont rapportés par le propriétaire ; Codex a revérifié les rapports locaux et le véritable AAB. Aucun appareil ADB connecté pendant la passe finale. La soumission reste conditionnée aux contrôles Play Console.
+Le manifest fusionné 29, les rapports JUnit/lint et l'inspection de l'artefact sont enregistrés dans `wear-audit-2026-09-09/`. Signature vérifiée et zipalign APK 16 KB réussi. Le 9 septembre, le propriétaire confirme le parcours physique réussi sur Galaxy Watch Ultra, avec versionCode=29/minSdk=30/targetSdk=35 vérifiés par ADB. Ces résultats physiques sont rapportés par le propriétaire ; Codex a revérifié les rapports locaux et le véritable AAB. Pendant la finalisation, Codex a personnellement confirmé par ADB le candidat 29 / 0.5.8 sur la Galaxy Watch Ultra SM-L705F, puis capturé trois écrans réels 480×480. Le parcours complet Ongoing Activity reste attesté par le propriétaire, sans le présenter comme une nouvelle exécution intégrale par Codex. La soumission reste conditionnée aux contrôles Play Console.
 
 Le téléphone reste configuré en **27 / 0.5.8**. Les modifications préexistantes du dépôt ont été conservées : comparaison de chaque section du diff initial avec le diff final, aucune section préexistante modifiée par cet audit. Le backend, Health Connect téléphone, les fichiers de transport Data Layer, les intervalles de polling, les mutations de séance et les données existantes n'ont pas été modifiés.
 
@@ -49,15 +49,15 @@ Le service n'est plus redémarré automatiquement à partir d'un ancien snapshot
 | WO-V8 : scrollbar | PositionIndicator ajouté aux listes et contenus défilants. |
 | WO-V13 : noir | Fond radial bleu remplacé par noir ; couleurs des contrôles conservées. Fond de fenêtre également noir. |
 | WO-V15 : splash | Correction 28 conservée : installSplashScreen avant super.onCreate, thème noir, drawable centré de 48×48 dp, même icône que le launcher. Chargement initial identique sans texte, timer ni seconde Activity. Fond noir et icône centrée PASS sur Galaxy Watch Ultra selon le propriétaire ; dimensions 48 dp confirmées dans les ressources, conservées sans modification. Aucun double splash signalé. |
-| WO-V16 : rond | Largeurs de cellules adaptatives, marges verticales sûres, contenus pouvant défiler. Pas de certification visuelle sans rendu du candidat. |
+| WO-V16 : rond | Largeurs de cellules adaptatives, marges verticales sûres, contenus pouvant défiler. Trois écrans réels 480×480 contrôlés sur Galaxy Watch Ultra ; petite montre non testée. |
 | WO-P1 : SDK | Source Wear : compileSdk **35**, targetSdk **35**, minSdk **30**. Bundle 28 confirme min 30/target 35. Le bundle 29 confirme ces valeurs. |
 | WO-P2 : stabilité | Build, tests unitaires Android 29, installation et parcours physique Galaxy Watch Ultra PASS. |
 | WO-P5 / P6 : compagnon/auth | Non-standalone cohérent : association et séance via téléphone, aucun formulaire utilisateur/mot de passe sur la montre. Association, séance et validation de séries PASS sur Galaxy Watch Ultra selon le propriétaire ; téléphone inchangé par cet audit. |
-| Batterie / écran / ambient | Suppression du maintien permanent de l'écran allumé et de WAKE_LOCK inutilisée. L'écran suit les délais système. Aucune collecte de pas/GPS, aucun nouveau ticker/polling. Ambient système et reprise après écran éteint à tester. |
+| Batterie / écran / ambient | Suppression du maintien permanent de l'écran allumé et de WAKE_LOCK inutilisée. L'écran suit les délais système. Aucune collecte de pas/GPS, aucun nouveau ticker/polling. Extinction naturelle et réveil observés pendant les captures ; parcours ambient prolongé non testé. |
 | Santé | Seuls HEART_RATE_BPM et CALORIES_TOTAL demandés à Health Services selon ses capacités : fréquence cardiaque et calories de la séance. Aucun Steps/StepsCadence/READ_STEPS. Calculs de métriques et logique métier préexistants conservés. |
 | FGS / notifications | Service health existant non exporté, permissions contrôlées, canal LOW, ongoing + touch intent, arrêt terminal. À tester avec refus/révocation des permissions et Android 14/15. Le système reste maître de la suppression/désactivation des notifications. |
 | WO-G7 : packaging | Même applicationId com.traknio.app. Certificat de signature identique sur les AAB locaux téléphone 27 et Wear 28 ; signature du 29 vérifiée également. |
-| WO-G1/G2/G3/G5/G8 | Déclarations, accès reviewer et captures Play : checklist manuelle ci-dessous. Les captures doivent être renouvelées après les ajustements visuels. |
+| WO-G1/G2/G3/G5/G8 | Déclarations, accès reviewer et captures Play : checklist manuelle ci-dessous. Trois captures du candidat 29 ont été enregistrées dans la fiche Play. |
 | Tuiles / cadrans / complications | Aucun composant de ce type. V9/V10/V12, P3/P7/P8/P10 et G4/G6/G9–G12 non applicables. |
 | Critères retirés | V7/V11, P4/P9 ne constituent plus des exigences actives. |
 
@@ -67,7 +67,7 @@ L'audit des règles Wear ne remplace pas l'examen Google ni les tests de fonctio
 
 Manifest source candidat : watch required=true, standalone=false, MainActivity exportée comme launcher/singleTop ; ExerciseTrackingService exporté=false/type=health ; récepteur Wear existant conservé. Pas de feature XR.
 
-Permissions source finales prévues :
+Permissions source finales confirmées :
 
 - INTERNET : échanges existants de séance.
 - VIBRATE : retours haptiques.
@@ -92,23 +92,42 @@ La conformité structurelle de l'ancien natif est établie, sans changement de d
 
 La source officielle Wear confirme le **15 septembre 2026 pour le 64 bits**. La page générale 16 KB consultée annonce actuellement une échéance différente, le **1er février 2027**. Il ne faut pas confondre ces deux dates ; la compatibilité 16 KB a néanmoins été contrôlée maintenant.
 
-**Play Console — constats en lecture seule**
+**Play Console — finalisation du 9 septembre 2026**
 
-Inventaire complet : 22 bundles importés, codes **7 à 28 inclus**. **29 libre au moment du contrôle**, choisi pour le candidat, versionName **0.5.8**. Aucun import effectué pendant l'audit.
+29 était libre (inventaire initial : codes 7 à 28). Le véritable AAB 29 a maintenant été importé avec succès dans la production Wear, release 4, nom `29 (0.5.8)`. Le bundle 28 est explicitement non inclus et aucun ancien bundle n'est conservé dans cette release. 81 appareils compatibles, aucun appareil perdu. La release est enregistrée dans la vue de publication, pas encore envoyée pour examen.
 
-Wear actif, distribution séparée : production Wear 28 rejetée, tests fermés Alpha Wear 24 encore disponible, tests internes Wear 10 encore accessible. Android XR actif, mais configuré pour **utiliser les artefacts et le canal mobile**, sans canal XR dédié. Ce n'est pas une configuration XR spécifique au Wear. Aucun réglage modifié.
+| Section | Classement et preuve / intervention |
+| --- | --- |
+| Production Wear | OK : AAB 29 accepté, min 30/target 35, quatre ABI, notes françaises enregistrées. Aucune erreur dans l'examen de la release ; deux avertissements de diagnostic ci-dessous. |
+| Versions / bundles | OK : 29 nouvel artefact, distinct du 28 ; hash local revérifié après import. |
+| Tests internes Wear 10 | CORRIGÉ : canal suspendu, état Inactif constaté. Action réversible, effet immédiat indiqué par Play. Aucune suppression de release publiée. |
+| Tests fermés Alpha Wear 24 | CORRIGÉ : suspension enregistrée, état Inactif constaté ; changement encore à envoyer pour examen dans la vue de publication. |
+| Historique Wear 28 | CONSERVÉ : rejet historique conservé ; artefact exclu de la nouvelle release. Aucune destruction d'historique. |
+| Téléphone / Alpha mobile | INCHANGÉS : demande préexistante de déploiement production 27 et suspension Alpha mobile présentes dans la vue de publication. Aucun nouvel artefact, aucune édition de ces canaux. Leur inclusion automatique empêche une soumission limitée au Wear sans clarification. |
+| Facteurs de forme | OK : Wear OS actif, distribution distincte. |
+| Android XR | OK : actif avec le canal et les artefacts mobiles, aucun canal XR Wear accidentel. Configuration conservée. |
+| Applis de santé | CORRIGÉ : justification BODY_SENSORS corrigée (fréquence cardiaque Health Services, pas calories Samsung Health) et ACTIVITY_RECOGNITION précisée (calories de séance, aucun pas/cadence dans Wear 29). Déclarations Health Connect téléphone conservées. |
+| Ancienne justification READ_STEPS | À CLARIFIER : champ historique encore présent dans le formulaire santé, absent de la liste de permissions initiale et du candidat Wear 29. Aucun ajout ni modification de ce champ ; attribution à un ancien artefact mobile non démontrée. Ne pas prétendre que toute la déclaration historique Play est dépourvue de Steps. |
+| Sécurité des données | CORRIGÉ : les informations santé/forme physique manquaient. Ajout de leur collecte persistante pour fonctionnalités/personnalisation : santé facultative (permissions), forme physique nécessaire au suivi des séances. Aucun partage déclaré au sens Play pour les sous-traitants agissant pour le compte de Traknio. E-mail/identifiant et autres réponses conservés. |
+| Confidentialité / suppression | OK pour la concordance Wear contrôlée : liens existants de confidentialité et suppression de compte/données conservés, OAuth déclaré. Aucun backend ou donnée modifié. |
+| FGS health | OK : déclaration existante de suivi sportif et lien vidéo conservés. La catégorie standard comprend le mot pas, sans constituer une demande READ_STEPS du Wear. Vidéo existante non revalidée intégralement ; une démonstration du parcours 29 serait utile mais n'a pas été ajoutée. |
+| Accès reviewer | OK selon confirmation explicite du propriétaire : « Oui, accès reviewer complet », sans code envoyé sur son téléphone, Premium et séance accessibles. Identifiants conservés, instructions anglaises de 9 étapes enregistrées (installer, connexion, association, séance, série, cadran, récents, reprise, fin). Aucune connexion de test effectuée par Codex avec ce compte. |
+| Captures Wear | CORRIGÉ : quatre anciennes captures remplacées dans la fiche fr-FR par trois captures réelles du 29, PNG 480×480 opaques, sans retouche ni cadre. Sources dans `wear-captures-29/`. Anciennes images conservées dans la bibliothèque ; captures téléphone inchangées. |
+| Conformité aux règles | Rejet historique « Activité en cours manquante » du 9 septembre encore affiché. Play indique que les modifications peuvent le résoudre et invite à les envoyer pour examen. Aucune nouvelle décision de Google sur le 29 à ce stade. |
+| Qualité technique | Aucun résultat Android Vitals disponible pour le candidat. Recommandation sur l'obfuscation de l'ancien téléphone 23 conservée sans changement du téléphone. |
+| Pré-lancement | NON DISPONIBLE : aucun rapport présenté lors du contrôle. Ne constitue pas un test PASS du candidat. |
+| Vue de publication | À CORRIGER / clarifier : sept changements regroupés, dont deux mobiles hors périmètre. Boutons « Enregistrer pour plus tard » désactivés ; menu du téléphone limité à « View change ». Vérifications rapides en cours lors du contrôle. Aucun clic d'envoi final. |
 
-Checklist avant nouvelle soumission :
+Les sept changements sont : production mobile 27, suspension Alpha mobile (tous deux préexistants), production Wear 29, suspension Alpha Wear, captures Wear fr-FR, sécurité des données et santé. Les instructions reviewer sont affichées séparément parmi les informations prises en compte pour l'examen. Publication gérée activée et conservée.
 
-- [ ] Générer et vérifier le candidat 29, puis refaire l'inventaire des codes si une autre soumission a eu lieu.
-- [ ] Remplacer le 28 dans la release Wear et vérifier les anciens artefacts encore actifs de **tous** les canaux Wear, notamment 24/10 ; ne pas conserver un artefact non conforme dans une release envoyée à examen.
-- [ ] Garder le canal et le bundle téléphone 27 inchangés ; ne pas associer le Wear à XR.
-- [ ] Vérifier les déclarations FGS health, santé/capteurs et sécurité des données : fréquence cardiaque/calories et usages réels, aucune déclaration Steps/StepsCadence.
-- [ ] Vérifier politique de confidentialité, suppression de compte/données, URLs opérationnelles et concordance avec les usages réels. Aucun changement de backend prévu par cet audit.
-- [ ] Fournir un compte reviewer fonctionnel avec accès complet, les instructions d'association téléphone/montre et une séance accessible.
-- [ ] Remplacer les captures Wear par des captures du candidat validé : carré 1:1, interface seule, pas de cadre/masquage/transparence ; conserver une description française exacte des fonctions.
-- [ ] Expliquer au reviewer le parcours séance → cadran → indicateur/récents → reprise → fin, avec vidéo de démonstration si utile.
-- [ ] Contrôler les rapports de pré-lancement et tous les messages de conformité avant de soumettre manuellement.
+Avertissements du candidat 29 : absence de fichier de désobfuscation (minification désactivée, aucun mapping R8 attendu) et absence de symboles de débogage natifs pour la bibliothèque tierce Compose. Ce sont des recommandations de diagnostic non bloquantes, pas des erreurs 64 bits ou 16 KB. Aucune erreur target API, signature, ABI ou pages mémoire affichée sur la release.
+
+Notes enregistrées :
+
+> Correction et amélioration de l’expérience Wear OS.
+> Amélioration du suivi des séances actives, de la navigation et de la compatibilité avec les exigences Wear OS.
+
+**Statut : NON SOUMIS.** Le candidat technique est validé et chargé ; la soumission groupée du téléphone 27 et de la suspension Alpha mobile nécessite une clarification, compte tenu de l'interdiction explicite de toucher au téléphone. Aucun changement mobile n'a été supprimé pour contourner cette limite. L'aide officielle décrit l'exclusion avec « Enregistrer pour plus tard », mais cette option est désactivée dans l'état actuel observé : https://support.google.com/googleplay/android-developer/answer/9859654?hl=fr.
 
 **Tests et livraison**
 
@@ -177,6 +196,6 @@ Dans `android-private/traknio-android/wear/` : `build.gradle.kts`, `src/main/And
 
 Ajout du script d'inspection, du présent rapport et des preuves sous `documents/play-store/wear-audit-2026-09-09/`. Suppressions ciblées expliquées : maintien permanent de l'écran, permissions devenues inutiles/inadaptées, fond radial et hitbox de retour superposée. Aucun fichier téléphone/backend modifié, aucune donnée existante effacée.
 
-Le commit de finalisation est limité aux changements Wear de cet audit et aux preuves. Les modifications préexistantes de transport/métriques, téléphone et backend restent exclues. Le binaire testé provient de la copie de travail, qui contient ces modifications préexistantes : son empreinte SHA-256 identifie exactement le candidat validé ; le seul commit d'audit ne prétend pas reconstituer toutes ces modifications locales. Aucun nouveau build ni changement UX après validation physique.
+Le commit `d7e2ed1fc6d6c49f6ce786a08ddf2c938595eeca` a été poussé sur `origin/main` et vérifié sur le distant. Il est limité aux changements Wear de cet audit et aux preuves. Les modifications préexistantes de transport/métriques, téléphone et backend restent exclues. Le binaire testé provient de la copie de travail, qui contient ces modifications préexistantes : son empreinte SHA-256 identifie exactement le candidat validé ; le seul commit d'audit ne prétend pas reconstituer toutes ces modifications locales. Aucun nouveau build ni changement UX après validation physique.
 
 Sources officielles consultées : [qualité Wear OS](https://developer.android.com/docs/quality-guidelines/wear-app-quality), [Ongoing Activity](https://developer.android.com/training/wearables/notifications/ongoing-activity), [target API Google Play](https://support.google.com/googleplay/android-developer/answer/11926878?hl=en), [64 bits Wear](https://android-developers.googleblog.com/2026/04/get-your-wear-os-apps-ready-for-64-bit-requirement.html), [pages 16 KB](https://developer.android.com/guide/practices/page-sizes), [permissions Health Services](https://developer.android.com/health-and-fitness/health-services/permissions), [changements Android 16 ciblé](https://developer.android.com/about/versions/16/behavior-changes-16), [ambient système](https://developer.android.com/training/wearables/always-on). API et compatibilité de wear-ongoing vérifiées également dans l'AAR, le POM et les sources AndroidX officiels.
