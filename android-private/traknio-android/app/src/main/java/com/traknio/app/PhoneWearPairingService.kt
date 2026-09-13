@@ -60,6 +60,7 @@ class PhoneWearPairingService : WearableListenerService() {
         val request = PhoneWatchRelayRequest.fromJson(String(messageEvent.data))?.copy(sourceNodeId = messageEvent.sourceNodeId)
         if (request == null || request.requestId.length !in 8..128) return
         Log.i(TAG, "relay received operation=${request.operation} request=${request.requestId.takeLast(8)}")
+        SyncMetrics.log("MESSAGE_RECEIVED", request.sessionId, request.requestId, request.operation, "MESSAGE_CLIENT")
         val persistForRetry = PhoneWatchRelayQueue.shouldPersist(request)
         if (persistForRetry) PhoneWatchRelayQueue.enqueue(applicationContext, request)
         val relayClient = PhoneWatchRelayClient(applicationContext)
@@ -80,6 +81,7 @@ class PhoneWearPairingService : WearableListenerService() {
                 }
             }
             RelayExecution.Retry -> {
+                SyncMetrics.log("RETRY", request.sessionId, request.requestId, request.operation, "PHONE_RELAY")
                 if (persistForRetry) {
                     relayClient.respond(
                         request = request,

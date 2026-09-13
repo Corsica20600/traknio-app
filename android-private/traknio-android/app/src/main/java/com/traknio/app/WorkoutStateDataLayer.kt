@@ -28,6 +28,7 @@ object WorkoutStateDataLayer {
         scope.launch {
             val state = JSONObject(normalized)
             val action = state.optString("action", "confirmed")
+            val sessionId = state.optString("sessionId")
             val revision = state.optString("revision").takeLast(24)
             if (BuildConfig.DEBUG) {
                 Log.d(TAG, "workout_state_phone_emit_start t=${System.currentTimeMillis()} action=$action revision=$revision")
@@ -42,6 +43,7 @@ object WorkoutStateDataLayer {
             }
             nodes.forEach { node ->
                 runCatching {
+                    SyncMetrics.log("DATALAYER_SENT", sessionId = sessionId, action = action, transport = "MESSAGE_CLIENT")
                     Wearable.getMessageClient(context.applicationContext)
                         .sendMessage(node.id, WearPairingPaths.WORKOUT_STATE, normalized.toByteArray())
                         .await()
@@ -61,6 +63,7 @@ object WorkoutStateDataLayer {
     fun receiveFromWatch(context: Context, stateJson: String) {
         val normalized = normalize(stateJson) ?: return
         val state = JSONObject(normalized)
+        SyncMetrics.log("DATALAYER_RECEIVED", sessionId = state.optString("sessionId"), action = state.optString("action", "confirmed"), transport = "MESSAGE_CLIENT")
         if (BuildConfig.DEBUG) {
             Log.d(
                 TAG,

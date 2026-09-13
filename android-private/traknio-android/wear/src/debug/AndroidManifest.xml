@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Visual review only. This activity and its fixtures never ship in release. -->
+        <activity android:name="com.traknio.watch.DesignReviewActivity" android:exported="true"
+            android:taskAffinity="com.traknio.watch.review" />
+    </application>
+</manifest>

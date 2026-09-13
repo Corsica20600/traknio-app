@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/src/lib/prisma";
+import { logSyncMetric } from "@/src/server/sync-metrics";
 
 export type WatchActionOperation =
+  | "start-session"
+  | "session-feedback"
   | "validate-set"
   | "update-live-target"
   | "skip-rest"
@@ -48,13 +51,20 @@ function toStoredResponse(value: Prisma.JsonValue | null): StoredResponse {
 
 export async function runIdempotentWatchAction<T>(input: {
   userProfileId: string;
+  sessionId?: string;
   requestId: string | null;
   operation: WatchActionOperation;
   payload: unknown;
   execute: (tx: Prisma.TransactionClient) => Promise<WatchActionResult<T>>;
 }): Promise<WatchActionResult<T>> {
   const requestId = input.requestId?.trim();
-  if (!requestId) return prisma.$transaction((tx) => input.execute(tx));
+  if (!requestId) {
+    const startedAt = Date.now();
+    logSyncMetric({ event: "DB_TRANSACTION_STARTED", sessionId: input.sessionId, action: input.operation });
+    const result = await prisma.$transaction((tx) => input.execute(tx));
+    logSyncMetric({ event: "DB_COMMITTED", sessionId: input.sessionId, action: input.operation, status: result.status, durationMs: Date.now() - startedAt });
+    return result;
+  }
   if (!/^[A-Za-z0-9_-]{8,128}$/.test(requestId)) {
     return { status: 400, body: { error: "invalid_watch_request_id" } };
   }
@@ -75,7 +85,9 @@ export async function runIdempotentWatchAction<T>(input: {
     .readBigInt64BE(0)
     .toString();
 
-  return prisma.$transaction(async (tx) => {
+  const startedAt = Date.now();
+  logSyncMetric({ event: "DB_TRANSACTION_STARTED", sessionId: input.sessionId, actionId: requestId, action: input.operation });
+  const result = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${BigInt(lockKey)})`;
     const existing = await tx.watchActionReceipt.findUnique({ where: key });
     if (existing) {
@@ -87,6 +99,7 @@ export async function runIdempotentWatchAction<T>(input: {
         return { status: 409, body: { error: "watch_action_payload_conflict" } };
       }
       if (existing.status === "COMPLETED" && existing.httpStatus != null) {
+        logSyncMetric({ event: "IDEMPOTENT_REPLAY", sessionId: input.sessionId, actionId: requestId, action: input.operation, replay: true, status: existing.httpStatus });
         return { status: existing.httpStatus, body: toStoredResponse(existing.response) as WatchActionResult<T>["body"] };
       }
       if (Date.now() - existing.updatedAt.getTime() < IN_PROGRESS_STALE_AFTER_MS) {
@@ -129,6 +142,8 @@ export async function runIdempotentWatchAction<T>(input: {
       throw error;
     }
   });
+  logSyncMetric({ event: "DB_COMMITTED", sessionId: input.sessionId, actionId: requestId, action: input.operation, status: result.status, durationMs: Date.now() - startedAt });
+  return result;
 }
 
 export class RetryableWatchActionError extends Error {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
 import { getOrCreateDemoProfile } from "@/src/server/fitness-queries";
 import { parseSessionNotesMeta, serializeSessionNotesMeta } from "@/src/server/session-exercise-replacements";
+import { logSyncMetric } from "@/src/server/sync-metrics";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -36,10 +37,12 @@ export async function POST(request: Request) {
   const setIndex = Math.max(1, Math.floor(Number(body.setIndex ?? 1)));
   const targetReps = body.targetReps == null ? null : Math.max(1, Math.floor(Number(body.targetReps)));
   const targetWeightKg = body.targetWeightKg == null ? null : Math.max(0, Number(body.targetWeightKg));
+  const actionId = request.headers.get("x-traknio-action-id")?.trim() || undefined;
 
   if (!sessionId || !exerciseId || !Number.isFinite(setIndex)) {
     return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
   }
+  logSyncMetric({ event: "API_RECEIVED", sessionId, actionId, action: "update-live-target", origin: "PHONE", transport: "HTTPS_PHONE" });
   if ((targetReps != null && !Number.isFinite(targetReps)) || (targetWeightKg != null && !Number.isFinite(targetWeightKg))) {
     return NextResponse.json({ error: "invalid_target" }, { status: 400 });
   }
@@ -86,6 +89,8 @@ export async function POST(request: Request) {
     },
   });
 
+  logSyncMetric({ event: "DB_WRITE_COMPLETED", sessionId, actionId, action: "update-live-target", origin: "PHONE", transport: "HTTPS_PHONE" });
+  logSyncMetric({ event: "API_CONFIRMED", sessionId, actionId, action: "update-live-target", origin: "PHONE", transport: "HTTPS_PHONE", status: 200 });
   return NextResponse.json({
     ok: true,
     state: {

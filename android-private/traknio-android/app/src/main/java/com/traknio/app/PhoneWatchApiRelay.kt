@@ -33,6 +33,12 @@ data class PhoneWatchRelayRequest(
     val sessionCaloriesKcal: Double?,
     val sourceNodeId: String,
     val createdAtMs: Long,
+    val programId: String? = null,
+    val programDayId: String? = null,
+    val cursor: String? = null,
+    val bootstrap: Boolean = false,
+    val rating: Int? = null,
+    val note: String? = null,
 ) {
     fun toJson(): String = JSONObject()
         .put("requestId", requestId)
@@ -46,6 +52,11 @@ data class PhoneWatchRelayRequest(
         .put("sessionCaloriesKcal", sessionCaloriesKcal)
         .put("sourceNodeId", sourceNodeId)
         .put("createdAtMs", createdAtMs)
+        .put("programId", programId)
+        .put("programDayId", programDayId)
+        .put("cursor", cursor)
+        .put("bootstrap", bootstrap)
+        .put("rating", rating).put("note", note)
         .toString()
 
     companion object {
@@ -63,6 +74,12 @@ data class PhoneWatchRelayRequest(
                 sessionCaloriesKcal = if (json.isNull("sessionCaloriesKcal")) null else json.optDouble("sessionCaloriesKcal"),
                 sourceNodeId = json.optString("sourceNodeId"),
                 createdAtMs = json.optLong("createdAtMs", System.currentTimeMillis()),
+                programId = json.optString("programId").takeIf { it.isNotBlank() },
+                programDayId = json.optString("programDayId").takeIf { it.isNotBlank() },
+                cursor = json.optString("cursor").takeIf { it.isNotBlank() },
+                bootstrap = json.optBoolean("bootstrap", false),
+                rating = if (json.isNull("rating")) null else json.getInt("rating"),
+                note = if (json.isNull("note")) null else json.getString("note"),
             )
         }.getOrNull()
     }
@@ -89,7 +106,8 @@ object PhoneWatchRelayQueue {
 
     fun isExpired(request: PhoneWatchRelayRequest) = System.currentTimeMillis() - request.createdAtMs > EXPIRY_MS
 
-    fun shouldPersist(request: PhoneWatchRelayRequest) = request.operation != "current-session"
+    // Don't start a workout minutes later as a queued side effect of a failed tap.
+    fun shouldPersist(request: PhoneWatchRelayRequest) = request.operation !in setOf("current-session", "programs", "start-session", "history", "statistics", "feedback")
 
     private fun read(context: Context): Map<String, String> {
         val raw = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_PENDING, null).orEmpty()
@@ -171,7 +189,14 @@ class PhoneWatchRelayClient(private val context: Context) {
         val cookies = CookieManager.getInstance().getCookie(baseUrl).orEmpty()
         if (cookies.isBlank()) return RelayExecution.FinalFailure(401, "Connecte-toi sur le téléphone")
         val endpoint = when (request.operation) {
-            "current-session" -> "/api/watch/current-session" + request.sessionId?.let { "?sessionId=${java.net.URLEncoder.encode(it, Charsets.UTF_8.name())}" }.orEmpty()
+            "feedback" -> "/api/watch/feedback"
+            "history", "statistics" -> "/api/watch/${request.operation}" + request.cursor?.let { "?cursor=${java.net.URLEncoder.encode(it, Charsets.UTF_8.name())}" }.orEmpty()
+            "programs" -> "/api/watch/programs" + request.cursor?.let { "?cursor=${java.net.URLEncoder.encode(it, Charsets.UTF_8.name())}" }.orEmpty()
+            "start-session" -> "/api/watch/start-session"
+            "current-session" -> "/api/watch/current-session" + listOfNotNull(
+                request.sessionId?.let { "sessionId=${java.net.URLEncoder.encode(it, Charsets.UTF_8.name())}" },
+                "bootstrap=1".takeIf { request.bootstrap },
+            ).joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
             "validate-set" -> "/api/watch/validate-set"
             "update-live-target" -> "/api/watch/update-live-target"
             "skip-rest" -> "/api/watch/skip-rest"
@@ -186,22 +211,27 @@ class PhoneWatchRelayClient(private val context: Context) {
             else -> return RelayExecution.FinalFailure(400, "Action montre inconnue")
         }
         return try {
+            SyncMetrics.log("API_STARTED", request.sessionId, request.requestId, request.operation, "PHONE_RELAY")
             val connection = (URL("$baseUrl$endpoint").openConnection() as HttpURLConnection).apply {
-                requestMethod = if (request.operation == "current-session") "GET" else "POST"
+                requestMethod = if (request.operation in setOf("current-session", "programs", "history", "statistics")) "GET" else "POST"
                 connectTimeout = 8_000
                 readTimeout = 8_000
                 setRequestProperty("accept", "application/json")
                 setRequestProperty("cookie", cookies)
                 setRequestProperty("x-traknio-action-id", request.requestId)
-                if (request.operation != "current-session") {
+                setRequestProperty("x-traknio-sync-transport", "PHONE_RELAY")
+                if (request.operation !in setOf("current-session", "programs", "history", "statistics")) {
                     doOutput = true
                     setRequestProperty("content-type", "application/json")
                 }
             }
-            if (request.operation != "current-session") {
+            if (request.operation !in setOf("current-session", "programs", "history", "statistics")) {
                 OutputStreamWriter(connection.outputStream).use { writer ->
                     writer.write(JSONObject()
                         .put("sessionId", request.sessionId)
+                        .put("programId", request.programId)
+                        .put("programDayId", request.programDayId)
+                        .put("rating", request.rating).put("note", request.note)
                         .put("actualReps", request.actualReps)
                         .put("weight", request.weight)
                         .put("deltaSeconds", request.deltaSeconds)
@@ -212,6 +242,7 @@ class PhoneWatchRelayClient(private val context: Context) {
                 }
             }
             val status = connection.responseCode
+            SyncMetrics.log("API_RECEIVED", request.sessionId, request.requestId, request.operation, "PHONE_RELAY", status)
             val raw = (if (status in 200..299) connection.inputStream else connection.errorStream)
                 ?.bufferedReader()?.use(BufferedReader::readText).orEmpty()
             val json = JSONObject(raw.ifBlank { "{}" })
@@ -252,6 +283,7 @@ class PhoneWatchRelayClient(private val context: Context) {
             .put("payload", payload)
             .put("error", error)
         val bytes = json.toString().toByteArray()
+        SyncMetrics.log("ACK_SENT", request.sessionId, request.requestId, request.operation, "PHONE_RELAY", httpStatus)
         // DataItem retains the final outcome until the watch reconnects; payloads are small WatchPayload JSON.
         val put = PutDataMapRequest.create("${WearPairingPaths.API_RESPONSE}/${request.requestId}").apply {
             dataMap.putString("responseJson", json.toString())
@@ -261,6 +293,7 @@ class PhoneWatchRelayClient(private val context: Context) {
             Wearable.getMessageClient(context).sendMessage(request.sourceNodeId, WearPairingPaths.API_RESPONSE, bytes).await()
         }
         return runCatching {
+            SyncMetrics.log("DATALAYER_SENT", request.sessionId, request.requestId, request.operation, "DATA_CLIENT", httpStatus)
             Wearable.getDataClient(context).putDataItem(put).await()
             Log.i("WATCH_RELAY", "response state=$state request=${request.requestId.takeLast(8)}")
             true

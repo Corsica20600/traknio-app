@@ -26,7 +26,9 @@ class WatchPhoneRelayClient(context: Context) {
             if (event.path != WearPairingPaths.API_RESPONSE && event.path != WearPairingPaths.API_STATUS) return
             val result = PhoneRelayResult.fromJson(event.data) ?: return
             Log.i(TAG, "relay message received request=${result.requestId.takeLast(8)} state=${result.state}")
+            SyncMetrics.log("ACK_RECEIVED", actionId = result.requestId, transport = "PHONE_RELAY")
             if (result.isTerminal()) {
+                SyncMetrics.log("DATALAYER_RECEIVED", actionId = result.requestId, transport = "DATA_CLIENT")
                 awaitingResponses.remove(result.requestId)?.complete(result)
             }
             WatchRelayEvents.emit(result)
@@ -51,7 +53,9 @@ class WatchPhoneRelayClient(context: Context) {
         Wearable.getDataClient(appContext).addListener(dataListener)
     }
 
-    suspend fun relay(request: WatchRelayRequest): WatchPayload = withContext(Dispatchers.IO) {
+    suspend fun relay(request: WatchRelayRequest): WatchPayload = WatchPayloadJson.parse(relayJson(request))
+
+    suspend fun relayJson(request: WatchRelayRequest): JSONObject = withContext(Dispatchers.IO) {
         val nodes = Wearable.getNodeClient(appContext).connectedNodes.await()
         Log.i(TAG, "relay nodes=${nodes.size} request=${request.requestId.takeLast(8)} operation=${request.operation}")
         if (nodes.isEmpty()) throw WatchPhoneUnavailableException()
@@ -60,13 +64,14 @@ class WatchPhoneRelayClient(context: Context) {
         awaitingResponses[request.requestId] = response
         try {
             WatchRelayEvents.emit(PhoneRelayResult(request.requestId, "SENDING", null, null, null))
+            SyncMetrics.log("MESSAGE_SENT", sessionId = request.sessionId, actionId = request.requestId, action = request.operation, transport = "MESSAGE_CLIENT")
             Wearable.getMessageClient(appContext)
                 .sendMessage(nodes.first().id, WearPairingPaths.API_REQUEST, request.toJson().toByteArray())
                 .await()
             Log.i(TAG, "relay request sent request=${request.requestId.takeLast(8)}")
             WatchRelayEvents.emit(PhoneRelayResult(request.requestId, "WAITING_PHONE", null, null, null))
 
-            withTimeout(INITIAL_RESPONSE_TIMEOUT_MS) { response.await() }.toPayloadOrThrow()
+            withTimeout(INITIAL_RESPONSE_TIMEOUT_MS) { response.await() }.toJsonOrThrow()
         } catch (_: TimeoutCancellationException) {
             throw WatchPhoneUnavailableException("Le téléphone ne répond pas")
         } finally {
@@ -95,6 +100,12 @@ data class WatchRelayRequest(
     val exerciseIndex: Int? = null,
     val averageHeartRateBpm: Int? = null,
     val sessionCaloriesKcal: Double? = null,
+    val programId: String? = null,
+    val programDayId: String? = null,
+    val cursor: String? = null,
+    val bootstrap: Boolean = false,
+    val rating: Int? = null,
+    val note: String? = null,
 ) {
     fun toJson(): String = JSONObject()
         .put("requestId", requestId)
@@ -106,6 +117,11 @@ data class WatchRelayRequest(
         .put("exerciseIndex", exerciseIndex)
         .put("averageHeartRateBpm", averageHeartRateBpm)
         .put("sessionCaloriesKcal", sessionCaloriesKcal)
+        .put("programId", programId)
+        .put("programDayId", programDayId)
+        .put("cursor", cursor)
+        .put("bootstrap", bootstrap)
+        .put("rating", rating).put("note", note)
         .toString()
 }
 
@@ -118,9 +134,11 @@ data class PhoneRelayResult(
 ) {
     fun isTerminal() = state == "COMPLETED" || state == "QUEUED" || state == "FAILED"
 
-    fun toPayloadOrThrow(): WatchPayload {
+    fun toPayloadOrThrow(): WatchPayload = WatchPayloadJson.parse(toJsonOrThrow())
+
+    fun toJsonOrThrow(): JSONObject {
         when (state) {
-            "COMPLETED" -> return payload?.let(WatchPayloadJson::parse)
+            "COMPLETED" -> return payload
                 ?: throw IllegalStateException("Réponse téléphone invalide")
             "QUEUED" -> throw WatchRelayQueuedException()
             else -> throw IllegalStateException(error ?: "Synchronisation téléphone impossible")
@@ -178,7 +196,7 @@ object WatchPayloadJson {
             val items = json.optJSONArray("exercises")
             for (index in 0 until (items?.length() ?: 0)) {
                 val item = items?.optJSONObject(index) ?: continue
-                add(WatchExerciseSummary(item.optInt("index"), item.optString("name"), item.optInt("totalSets", 1), item.optInt("completedSets"), item.optInt("activeSetIndex", 1), item.optInt("targetReps", 10), if (item.isNull("weight")) null else item.optDouble("weight")))
+                add(WatchExerciseSummary(item.optInt("index"), item.optString("name"), item.optInt("totalSets", 1), item.optInt("completedSets"), item.optInt("activeSetIndex", 1), item.optInt("targetReps", 10), if (item.isNull("weight")) null else item.optDouble("weight"), if (item.isNull("imageUrl")) null else item.optString("imageUrl")))
             }
         },
     )

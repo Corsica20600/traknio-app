@@ -15,6 +15,7 @@ export type SessionLiveTarget = {
 };
 
 type SessionNotesMeta = {
+  watchFeedback?: { rating: number; note: string; submittedAt: string };
   text?: string | null;
   exerciseReplacements?: Record<string, SessionExerciseReplacement>;
   liveTargets?: Record<string, SessionLiveTarget>;
@@ -41,6 +42,7 @@ export function getSessionLiveTargets(notes?: string | null) {
 
 export function serializeSessionNotesMeta(meta: SessionNotesMeta) {
   const normalized: SessionNotesMeta = {};
+  if (meta.watchFeedback) normalized.watchFeedback = meta.watchFeedback;
   if (meta.text?.trim()) normalized.text = meta.text.trim();
   if (meta.exerciseReplacements && Object.keys(meta.exerciseReplacements).length > 0) {
     normalized.exerciseReplacements = meta.exerciseReplacements;

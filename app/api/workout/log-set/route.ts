@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
 import { syncProgramExerciseTargets } from "@/src/server/program-target-sync";
+import { logSyncMetric } from "@/src/server/sync-metrics";
 
 export async function POST(request: Request) {
   const body = await request.json();
@@ -19,6 +20,8 @@ export async function POST(request: Request) {
   if (!sessionId || !exerciseId || !Number.isFinite(setIndex) || setIndex < 1) {
     return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
   }
+  const actionId = request.headers.get("x-traknio-action-id")?.trim() || undefined;
+  logSyncMetric({ event: "API_RECEIVED", sessionId, actionId, action: "validate-set", origin: "PHONE", transport: "HTTPS_PHONE" });
 
   const existing = await prisma.workoutSet.findFirst({
     where: { workoutSessionId: sessionId, exerciseId, setIndex },
@@ -67,6 +70,8 @@ export async function POST(request: Request) {
     actualWeightKg: payload.actualWeightKg,
   });
 
+  const transactionStartedAt = Date.now();
+  logSyncMetric({ event: "DB_TRANSACTION_STARTED", sessionId, actionId, action: "validate-set", origin: "PHONE", transport: "HTTPS_PHONE" });
   const saved = await prisma.$transaction(async (tx) => {
     const completedSet = existing
       ? await tx.workoutSet.update({
@@ -118,7 +123,9 @@ export async function POST(request: Request) {
     });
     return { completedSet, watchState };
   });
+  logSyncMetric({ event: "DB_COMMITTED", sessionId, actionId, action: "validate-set", origin: "PHONE", transport: "HTTPS_PHONE", durationMs: Date.now() - transactionStartedAt });
 
+  logSyncMetric({ event: "API_CONFIRMED", sessionId, actionId, action: "validate-set", origin: "PHONE", transport: "HTTPS_PHONE", status: 200 });
   return NextResponse.json({
     set: {
       id: saved.completedSet.id,

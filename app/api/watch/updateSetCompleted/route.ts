@@ -6,12 +6,13 @@ export async function POST(request: Request) {
   const access = await requireWatchAccess(request);
   if (!access.ok) return access.response;
 
-  const body = await request.json();
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   const workoutSessionId = String(body.workoutSessionId ?? "").trim();
   const exerciseId = String(body.exerciseId ?? "").trim();
   const setIndex = Number(body.setIndex ?? 0);
 
-  if (!workoutSessionId || !exerciseId || !Number.isFinite(setIndex) || setIndex < 1) {
+  if (!workoutSessionId || !exerciseId || !Number.isInteger(setIndex) || setIndex < 1) {
     return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
   }
 

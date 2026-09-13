@@ -112,6 +112,20 @@ declare global {
 
 const PLANNED_REPS = [12, 10, 10];
 
+function createSyncActionId() {
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function logPhoneSyncMetric(event: string, input: { sessionId: string; actionId?: string; action?: string; transport?: string }) {
+  try {
+    console.info("TRAKNIO_SYNC_METRIC", JSON.stringify({ ts: new Date().toISOString(), origin: "PHONE", event, ...input }));
+  } catch {
+    // Observability is best-effort and must not affect workout interactions.
+  }
+}
+
 type WakeLockSentinelLike = {
   released: boolean;
   release: () => Promise<void>;
@@ -404,6 +418,8 @@ export function GuidedWorkoutClient({
   }, []);
 
   const pushSyncState = useCallback((nextExerciseIndex: number, nextSetIndex: number, nextRest?: number, status: "ACTIVE" | "PAUSED" | "COMPLETED" = "ACTIVE") => {
+    const actionId = createSyncActionId();
+    logPhoneSyncMetric("ACTION_CREATED", { sessionId, actionId, action: "select-exercise" });
     publishRealtimeState({
       sessionId,
       revision: `optimistic:${Date.now()}`,
@@ -429,8 +445,8 @@ export function GuidedWorkoutClient({
     }
     void fetch("/api/watch/syncWorkoutState", {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
+      headers: { "content-type": "application/json", "x-traknio-action-id": actionId },
+      body: JSON.stringify({ ...body, compact: true }),
     }).then(async (response) => {
       if (!response.ok) return;
       const data = await response.json() as { state?: { deviceSession?: { currentExerciseIndex?: number; currentSetIndex?: number; lastSyncAt?: string; restRemainingSeconds?: number; restStatus?: "IDLE" | "ACTIVE" | "PAUSED"; restUpdatedAt?: string | null; status?: string } } };
@@ -457,6 +473,8 @@ export function GuidedWorkoutClient({
     targetWeightKg: number;
     currentExerciseIndex: number;
   }) => {
+    const actionId = createSyncActionId();
+    logPhoneSyncMetric("ACTION_CREATED", { sessionId, actionId, action: "update-live-target" });
     publishRealtimeState({
       sessionId,
       revision: `optimistic:${Date.now()}`,
@@ -477,7 +495,7 @@ export function GuidedWorkoutClient({
     liveTargetTimerRef.current = window.setTimeout(() => {
       void fetch("/api/workout/live-target", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-traknio-action-id": actionId },
         body: JSON.stringify({
           sessionId,
           exerciseId: input.exerciseId,
@@ -838,6 +856,8 @@ export function GuidedWorkoutClient({
     const actualReps = Math.max(1, repsByKey[key] ?? plannedReps);
     const actualWeightKg = Math.max(0, weightByKey[key] ?? exercise.plannedWeightKg ?? 0);
     const validatedRestSeconds = restChoice;
+    const actionId = createSyncActionId();
+    logPhoneSyncMetric("ACTION_CREATED", { sessionId, actionId, action: "validate-set" });
     const previousRestEndsAt = restEndsAt;
     const previousRestRemaining = restRemaining;
 
@@ -857,7 +877,7 @@ export function GuidedWorkoutClient({
     try {
       const response = await fetch("/api/workout/log-set", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-traknio-action-id": actionId },
         body: JSON.stringify({
           sessionId,
           exerciseId: exercise.id,
@@ -981,6 +1001,8 @@ export function GuidedWorkoutClient({
   }
 
   async function onSkipRest() {
+    const actionId = createSyncActionId();
+    logPhoneSyncMetric("ACTION_CREATED", { sessionId, actionId, action: "skip-rest" });
     unlockRestAudio();
     skipRestRequestedRef.current = true;
     prevRestRemainingRef.current = 0;
@@ -1010,6 +1032,8 @@ export function GuidedWorkoutClient({
     setIsRestActionPending(true);
     unlockRestAudio();
     const currentRemaining = Math.max(0, restRemaining);
+    const actionId = createSyncActionId();
+    logPhoneSyncMetric("ACTION_CREATED", { sessionId, actionId, action: "adjust-rest" });
     const optimisticRemaining = Math.max(0, currentRemaining + deltaSeconds);
     if (optimisticRemaining > 0 && !restPaused) {
       startRestTimer(optimisticRemaining);
@@ -1109,6 +1133,9 @@ export function GuidedWorkoutClient({
         : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       operation: restPaused ? "resume" as const : "pause" as const,
     };
+    if (!pending) {
+      logPhoneSyncMetric("ACTION_CREATED", { sessionId, actionId: action.requestId, action: action.operation === "pause" ? "pause-rest" : "resume-rest" });
+    }
     pendingRestActionRef.current = action;
     setRestSyncPending(false);
 
@@ -1214,6 +1241,8 @@ export function GuidedWorkoutClient({
   }
 
   async function onCompleteWorkout(forceComplete = false) {
+    const actionId = createSyncActionId();
+    logPhoneSyncMetric("ACTION_CREATED", { sessionId, actionId, action: "complete-session" });
     unlockRestAudio();
     setEnding(true);
     setCompletionError(null);
@@ -1225,7 +1254,7 @@ export function GuidedWorkoutClient({
     });
     const response = await fetch("/api/workout/complete", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-traknio-action-id": actionId },
       body: JSON.stringify({ sessionId, forceComplete }),
     });
     if (!response.ok) {

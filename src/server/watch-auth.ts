@@ -5,7 +5,7 @@ import { prisma } from "@/src/lib/prisma";
 import { hashWatchDeviceToken } from "@/src/lib/watch-device-token";
 
 type WatchAccessResult =
-  | { ok: true; mode: "session" | "device"; userProfileId?: string; profileEmail?: string | null }
+  | { ok: true; mode: "session" | "device"; userProfileId: string; profileEmail?: string | null }
   | { ok: false; response: NextResponse };
 
 export async function requireWatchAccess(request: Request): Promise<WatchAccessResult> {
@@ -32,7 +32,8 @@ export async function requireWatchAccess(request: Request): Promise<WatchAccessR
       return { ok: true, mode: "session", userProfileId: profile.id, profileEmail: profile.email };
     }
 
-    return { ok: true, mode: "session", profileEmail: email };
+    // Never let legacy routes call optional-owner helpers with no owner filter.
+    return { ok: false, response: NextResponse.json({ error: "watch_profile_required" }, { status: 401 }) };
   }
 
   const deviceToken = request.headers.get("x-watch-device-token")?.trim() || "";

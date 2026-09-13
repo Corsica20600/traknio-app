@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/src/lib/prisma";
 import { getOrCreateDemoProfile } from "@/src/server/fitness-queries";
 import { markOnboardingStepForProfile } from "@/src/server/onboarding-actions";
+import { startOrResumeWorkout } from "@/src/server/workout-start";
 
 export async function createSimpleProgramAction(formData: FormData) {
   const profile = await getOrCreateDemoProfile();
@@ -45,48 +46,12 @@ export async function startWorkoutSessionAction(formData: FormData) {
   // never create a parallel IN_PROGRESS session with a competing Watch state.
   if (activeSession) redirect("/workout");
 
-  const programIdRaw = String(formData.get("programId") ?? "").trim();
-  const programDayIdRaw = String(formData.get("programDayId") ?? "").trim();
-  const title = String(formData.get("title") ?? "Seance libre").trim();
-  const selectedProgram = programIdRaw.length
-    ? await prisma.program.findFirst({
-        where: { id: programIdRaw, userProfileId: profile.id },
-        select: {
-          id: true,
-          name: true,
-          days: {
-            select: { id: true, title: true },
-            orderBy: { dayIndex: "asc" },
-          },
-        },
-      })
-    : null;
-  const selectedDay = selectedProgram?.days.find((day) => day.id === programDayIdRaw) ?? selectedProgram?.days[0] ?? null;
-  const defaultTitle = selectedProgram?.name?.trim() || "Seance libre";
-  const sessionTitle = title.length && title.toLowerCase() !== "seance libre"
-    ? title
-    : defaultTitle;
-
-  const session = await prisma.workoutSession.create({
-    data: {
-      userProfileId: profile.id,
-      programId: selectedProgram?.id ?? null,
-      programDayId: selectedDay?.id ?? null,
-      title: sessionTitle,
-      status: "IN_PROGRESS",
-      startedAt: new Date(),
-    },
-  });
-
-  await prisma.watchSession.create({
-    data: {
-      workoutSessionId: session.id,
-      currentExerciseIndex: 0,
-      currentSetIndex: 1,
-      status: "ACTIVE",
-      lastSyncAt: new Date(),
-    },
-  });
+  await prisma.$transaction(tx => startOrResumeWorkout(tx, {
+    userProfileId: profile.id,
+    programId: String(formData.get("programId") ?? "").trim(),
+    programDayId: String(formData.get("programDayId") ?? "").trim(),
+    title: String(formData.get("title") ?? "Seance libre").trim(),
+  }));
 
   revalidatePath("/workout");
   revalidatePath("/dashboard");

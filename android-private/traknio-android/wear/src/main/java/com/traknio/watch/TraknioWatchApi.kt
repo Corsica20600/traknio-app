@@ -19,8 +19,45 @@ class TraknioWatchApi(
     private val deviceTokenProvider: () -> String? = { null },
     private val phoneRelayClient: WatchPhoneRelayClient? = null,
 ) {
+    suspend fun feedback(sessionId: String, rating: Int, note: String, requestId: String): Boolean {
+        val payload = try {
+            requestJson("/api/watch/feedback", "POST", JSONObject().put("sessionId", sessionId).put("rating", rating).put("note", note), requestId)
+        } catch (error: Throwable) {
+            if (!isTransportFailure(error)) throw error
+            phoneRelayClient?.relayJson(WatchRelayRequest(requestId, "feedback", sessionId, rating = rating, note = note)) ?: throw error
+        }
+        return payload.optBoolean("feedbackSaved", false)
+    }
+    suspend fun insights(operation: String, cursor: String? = null): JSONObject {
+        require(operation in setOf("history", "statistics"))
+        return try {
+            requestJson("/api/watch/$operation" + cursor?.let { "?cursor=${it.urlEncode()}" }.orEmpty(), "GET", null, null)
+        } catch (error: Throwable) {
+            if (!isTransportFailure(error)) throw error
+            phoneRelayClient?.relayJson(WatchRelayRequest(UUID.randomUUID().toString(), operation, null, cursor = cursor)) ?: throw error
+        }
+    }
+    suspend fun programs(cursor: String? = null): WatchProgramPage {
+        val request = WatchRelayRequest(UUID.randomUUID().toString(), "programs", null, cursor = cursor)
+        val json = try {
+            requestJson("/api/watch/programs" + cursor?.let { "?cursor=${it.urlEncode()}" }.orEmpty(), "GET", null, null)
+        } catch (error: Throwable) {
+            if (!isTransportFailure(error)) throw error
+            phoneRelayClient?.relayJson(request) ?: throw error
+        }
+        return WatchProgramPage.fromJson(json)
+    }
+
+    suspend fun startSession(programId: String, programDayId: String, requestId: String): WatchPayload {
+        val request = WatchRelayRequest(requestId, "start-session", null, programId = programId, programDayId = programDayId)
+        return executeWithFallback(request) {
+            requestPayload("/api/watch/start-session", "POST", JSONObject().put("programId", programId).put("programDayId", programDayId), requestId)
+        }
+    }
     suspend fun currentSession(sessionId: String? = null, bootstrap: Boolean = false): WatchPayload = executeWithFallback(
-        WatchRelayRequest(UUID.randomUUID().toString(), "current-session", sessionId),
+        WatchRelayRequest(UUID.randomUUID().toString(), "current-session", sessionId, bootstrap = bootstrap).also {
+            SyncMetrics.log("POLL", sessionId = sessionId, actionId = it.requestId, action = "current-session", transport = "HTTPS_WATCH_DIRECT")
+        },
     ) {
         requestPayload(
             path = buildString {
@@ -156,21 +193,29 @@ class TraknioWatchApi(
             averageHeartRateBpm = extra["averageHeartRateBpm"] as? Int,
             sessionCaloriesKcal = extra["sessionCaloriesKcal"] as? Double,
         )
+        SyncMetrics.log("ACTION_CREATED", sessionId = sessionId, actionId = request.requestId, action = operation)
         return executeWithFallback(request) { requestPayload(path, "POST", body, request.requestId) }
     }
 
     private suspend fun executeWithFallback(request: WatchRelayRequest, direct: suspend () -> WatchPayload): WatchPayload {
         return try {
-            direct()
+            SyncMetrics.log("API_STARTED", sessionId = request.sessionId, actionId = request.requestId, action = request.operation, transport = "HTTPS_WATCH_DIRECT")
+            direct().also {
+                SyncMetrics.log("API_CONFIRMED", sessionId = request.sessionId, actionId = request.requestId, action = request.operation, transport = "HTTPS_WATCH_DIRECT")
+            }
         } catch (error: Throwable) {
             if (!isTransportFailure(error)) throw error
+            SyncMetrics.log("FALLBACK", sessionId = request.sessionId, actionId = request.requestId, action = request.operation, transport = "PHONE_RELAY")
             Log.i(TAG, "direct transport failed; falling back operation=${request.operation} request=${request.requestId.takeLast(8)}")
             val relay = phoneRelayClient ?: throw error
             relay.relay(request)
         }
     }
 
-    private suspend fun requestPayload(path: String, method: String, body: JSONObject?, requestId: String?): WatchPayload = withContext(Dispatchers.IO) {
+    private suspend fun requestPayload(path: String, method: String, body: JSONObject?, requestId: String?): WatchPayload =
+        parsePayload(requestJson(path, method, body, requestId))
+
+    private suspend fun requestJson(path: String, method: String, body: JSONObject?, requestId: String?): JSONObject = withContext(Dispatchers.IO) {
         val connection = (URL("$baseUrl$path").openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 8_000
@@ -197,13 +242,14 @@ class TraknioWatchApi(
             }
 
             val statusCode = connection.responseCode
+            SyncMetrics.log("API_RECEIVED", actionId = requestId, transport = "HTTPS_WATCH_DIRECT", status = statusCode)
             val raw = readBody(connection, statusCode)
             val json = JSONObject(raw.ifBlank { "{}" })
             Log.i(TAG, "watch api response path=$path status=$statusCode ok=${statusCode in 200..299}")
             if (statusCode !in 200..299) {
                 throw IllegalStateException(json.optString("error", "Erreur serveur"))
             }
-            parsePayload(json.getJSONObject("payload"))
+            json.getJSONObject("payload")
         } catch (error: IOException) {
             throw WatchTransportException(error)
         } finally {
@@ -251,7 +297,7 @@ class TraknioWatchApi(
     private fun parseExercises(items: org.json.JSONArray?): List<WatchExerciseSummary> = buildList {
         for (index in 0 until (items?.length() ?: 0)) {
             val item = items?.optJSONObject(index) ?: continue
-            add(WatchExerciseSummary(item.optInt("index"), item.optString("name"), item.optInt("totalSets", 1), item.optInt("completedSets"), item.optInt("activeSetIndex", 1), item.optInt("targetReps", 10), if (item.isNull("weight")) null else item.optDouble("weight")))
+            add(WatchExerciseSummary(item.optInt("index"), item.optString("name"), item.optInt("totalSets", 1), item.optInt("completedSets"), item.optInt("activeSetIndex", 1), item.optInt("targetReps", 10), if (item.isNull("weight")) null else item.optDouble("weight"), if (item.isNull("imageUrl")) null else item.optString("imageUrl")))
         }
     }
 

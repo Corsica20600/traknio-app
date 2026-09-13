@@ -106,6 +106,7 @@ object WatchWorkoutStateDataLayer {
             }
             nodes.forEach { node ->
                 runCatching {
+                    SyncMetrics.log("DATALAYER_SENT", sessionId = state.sessionId, action = state.action, transport = "MESSAGE_CLIENT")
                     Wearable.getMessageClient(context.applicationContext)
                         .sendMessage(node.id, WearPairingPaths.WORKOUT_STATE, state.toJson().toByteArray())
                         .await()
@@ -143,6 +144,7 @@ object WatchWorkoutStateDataLayer {
     }
 
     fun receive(context: Context, state: WorkoutStateMessage) {
+        SyncMetrics.log("DATALAYER_RECEIVED", sessionId = state.sessionId, action = state.action, transport = "MESSAGE_CLIENT")
         if (BuildConfig.DEBUG) {
             Log.d(TAG, "workout_state_wear_received t=${System.currentTimeMillis()} action=${state.action ?: "confirmed"} revision=${state.revision.takeLast(24)} session=${state.sessionId.takeLast(8)} optimistic=${state.optimistic}")
         }

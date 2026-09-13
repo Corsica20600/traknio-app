@@ -33,10 +33,11 @@ export type WorkoutStatePayload = {
   };
 };
 
-async function ensureDeviceSession(workoutSessionId: string) {
-  return prisma.watchSession.upsert({
+async function ensureDeviceSession(workoutSessionId: string, db = prisma) {
+  return db.watchSession.upsert({
     where: { workoutSessionId },
-    update: { lastSyncAt: new Date() },
+    // Reading state must not manufacture a newer revision or write on every poll.
+    update: {},
     create: {
       workoutSessionId,
       currentExerciseIndex: 0,
@@ -51,12 +52,13 @@ export async function getCurrentWorkoutState(workoutSessionId: string): Promise<
   return getCurrentWorkoutStateForProfile(workoutSessionId);
 }
 
-export async function getCurrentWorkoutStateForProfile(workoutSessionId: string, userProfileId?: string): Promise<WorkoutStatePayload | null> {
+export async function getCurrentWorkoutStateForProfile(workoutSessionId: string, userProfileId?: string, db = prisma): Promise<WorkoutStatePayload | null> {
   if (!workoutSessionId) return null;
 
-  const session = await prisma.workoutSession.findUnique({
+  const session = await db.workoutSession.findUnique({
     where: userProfileId ? { id: workoutSessionId, userProfileId } : { id: workoutSessionId },
     include: {
+      watchSession: true,
       sets: {
         include: {
           exercise: {
@@ -69,7 +71,7 @@ export async function getCurrentWorkoutStateForProfile(workoutSessionId: string,
   });
 
   if (!session) return null;
-  const deviceSession = await ensureDeviceSession(workoutSessionId);
+  const deviceSession = session.watchSession ?? await ensureDeviceSession(workoutSessionId, db);
 
   const byExercise = new Map<string, {
     exerciseId: string;
@@ -239,16 +241,17 @@ export async function syncWorkoutState(input: {
   restStatus?: "IDLE" | "ACTIVE" | "PAUSED";
   status?: "ACTIVE" | "PAUSED" | "COMPLETED";
   lastSyncAt?: string;
+  compact?: boolean;
   userProfileId?: string;
-}) {
+}, db = prisma) {
   if (!input.workoutSessionId) return null;
   const session = input.userProfileId
-    ? await prisma.workoutSession.findUnique({ where: { id: input.workoutSessionId, userProfileId: input.userProfileId }, select: { id: true } })
-    : await prisma.workoutSession.findUnique({ where: { id: input.workoutSessionId }, select: { id: true } });
+    ? await db.workoutSession.findUnique({ where: { id: input.workoutSessionId, userProfileId: input.userProfileId }, select: { id: true, watchSession: true } })
+    : await db.workoutSession.findUnique({ where: { id: input.workoutSessionId }, select: { id: true, watchSession: true } });
 
   if (!session) return null;
 
-  const fallback = await ensureDeviceSession(input.workoutSessionId);
+  const fallback = session.watchSession ?? await ensureDeviceSession(input.workoutSessionId, db);
   const syncDate = input.lastSyncAt ? new Date(input.lastSyncAt) : new Date();
   const currentExerciseIndex = Number.isFinite(input.currentExerciseIndex as number)
     ? Math.max(0, Math.floor(input.currentExerciseIndex as number))
@@ -259,25 +262,20 @@ export async function syncWorkoutState(input: {
   const currentScore = (fallback.currentExerciseIndex * 1000) + fallback.currentSetIndex;
   const incomingScore = (currentExerciseIndex * 1000) + currentSetIndex;
   const shouldPreventRollback = (input.status ?? fallback.status) === "ACTIVE" && incomingScore < currentScore;
+  const restRemainingSeconds = Number.isFinite(input.restRemaining) ? Math.max(0, Math.min(600, Math.floor(input.restRemaining!))) : null;
+  const restStatus = restRemainingSeconds === 0 ? "IDLE" : input.restStatus === "PAUSED" ? "PAUSED" : "ACTIVE";
 
-  await prisma.watchSession.update({
+  const updated = await db.watchSession.update({
     where: { id: fallback.id },
     data: {
       currentExerciseIndex: shouldPreventRollback ? fallback.currentExerciseIndex : currentExerciseIndex,
       currentSetIndex: shouldPreventRollback ? fallback.currentSetIndex : currentSetIndex,
       status: input.status ?? fallback.status,
       lastSyncAt: Number.isNaN(syncDate.getTime()) ? new Date() : syncDate,
+      ...(restRemainingSeconds != null ? { restStatus: restStatus as "IDLE" | "PAUSED" | "ACTIVE", restRemainingSeconds, restUpdatedAt: new Date(), lastSyncAt: new Date() } : {}),
     },
   });
 
-  if (Number.isFinite(input.restRemaining)) {
-    const restRemainingSeconds = Math.max(0, Math.min(600, Math.floor(input.restRemaining as number)));
-    const restStatus = restRemainingSeconds <= 0 ? "IDLE" : input.restStatus === "PAUSED" ? "PAUSED" : "ACTIVE";
-    await prisma.watchSession.update({
-      where: { id: fallback.id },
-      data: { restStatus, restRemainingSeconds, restUpdatedAt: new Date(), lastSyncAt: new Date() },
-    });
-  }
-
-  return getCurrentWorkoutStateForProfile(input.workoutSessionId, input.userProfileId);
+  if (input.compact) return { deviceSession: { ...updated, lastSyncAt: updated.lastSyncAt.toISOString(), restUpdatedAt: updated.restUpdatedAt?.toISOString() ?? null } };
+  return getCurrentWorkoutStateForProfile(input.workoutSessionId, input.userProfileId, db);
 }

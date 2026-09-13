@@ -1,22 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
-import { getOrCreateDemoProfile } from "@/src/server/fitness-queries";
 import { requireWatchAccess } from "@/src/server/watch-auth";
 
 export async function GET(request: Request) {
   const access = await requireWatchAccess(request);
   if (!access.ok) return access.response;
 
-  const profile = access.userProfileId
-    ? await prisma.userProfile.findUnique({
-        where: { id: access.userProfileId },
-        select: { id: true, email: true },
-      })
-    : await getOrCreateDemoProfile();
-
-  if (!profile) {
-    return NextResponse.json({ error: "watch_profile_not_found" }, { status: 404 });
-  }
+  const profile = { id: access.userProfileId, email: access.profileEmail ?? null };
 
   const activeSession = await prisma.workoutSession.findFirst({
     where: {

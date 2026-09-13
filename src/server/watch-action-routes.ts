@@ -14,6 +14,7 @@ import {
   updateWatchLiveTarget,
 } from "@/src/server/watch-mobile";
 import { runIdempotentWatchAction, type WatchActionOperation, type WatchActionResult } from "@/src/server/watch-action-idempotency";
+import { logSyncMetric, withSyncMetricContext } from "@/src/server/sync-metrics";
 
 type WatchAccess = { userProfileId?: string };
 
@@ -28,7 +29,7 @@ function revalidateWatchPaths(operation: WatchActionOperation) {
 export async function executeWatchActionRoute(input: {
   request: Request;
   access: WatchAccess;
-  operation: WatchActionOperation;
+  operation: Exclude<WatchActionOperation, "start-session" | "session-feedback">;
 }) {
   const body = await input.request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body) return NextResponse.json({ error: "invalid_json" }, { status: 400 });
@@ -37,7 +38,6 @@ export async function executeWatchActionRoute(input: {
 
   const userProfileId = input.access.userProfileId;
   if (!userProfileId) return NextResponse.json({ error: "watch_profile_required" }, { status: 401 });
-  const requestId = input.request.headers.get("x-traknio-action-id");
   const canonicalPayload = {
     sessionId,
     actualReps: body.actualReps == null ? null : Number(body.actualReps),
@@ -48,9 +48,23 @@ export async function executeWatchActionRoute(input: {
     sessionCaloriesKcal: body.sessionCaloriesKcal == null ? null : Number(body.sessionCaloriesKcal),
   };
 
+  const requestId = input.request.headers.get("x-traknio-action-id")?.trim() || undefined;
+  if (Object.values(canonicalPayload).some(value => typeof value === "number" && !Number.isFinite(value)) ||
+      (canonicalPayload.actualReps != null && (!Number.isInteger(canonicalPayload.actualReps) || canonicalPayload.actualReps < 1)) ||
+      (canonicalPayload.exerciseIndex != null && (!Number.isInteger(canonicalPayload.exerciseIndex) || canonicalPayload.exerciseIndex < 0)) ||
+      (canonicalPayload.weight != null && canonicalPayload.weight < 0)) {
+    return NextResponse.json({ error: "invalid_numeric_payload" }, { status: 400 });
+  }
+  const origin = input.request.headers.get("x-watch-device-token") ? "WATCH" : "PHONE";
+  const transport = origin === "WATCH"
+    ? "HTTPS_WATCH_DIRECT"
+    : (input.request.headers.get("x-traknio-sync-transport") === "PHONE_RELAY" ? "PHONE_RELAY" : "UNKNOWN");
+  return withSyncMetricContext({ sessionId, actionId: requestId, action: input.operation, origin, transport }, async () => {
+  logSyncMetric({ event: "API_RECEIVED" });
   const result = await runIdempotentWatchAction({
     userProfileId,
-    requestId,
+    sessionId,
+    requestId: requestId ?? null,
     operation: input.operation,
     payload: canonicalPayload,
     execute: async (tx): Promise<WatchActionResult<unknown>> => {
@@ -92,6 +106,11 @@ export async function executeWatchActionRoute(input: {
     },
   });
 
-  if (result.status >= 200 && result.status <= 299) revalidateWatchPaths(input.operation);
+  if (result.status >= 200 && result.status <= 299) {
+    logSyncMetric({ event: "BOOTSTRAP_AFTER_MUTATION", bootstrap: true });
+    revalidateWatchPaths(input.operation);
+  }
+  logSyncMetric({ event: "API_CONFIRMED", status: result.status });
   return NextResponse.json(result.body, { status: result.status });
+  });
 }

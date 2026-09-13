@@ -3,15 +3,18 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/src/lib/prisma";
 import { getExerciseDisplayName } from "@/src/lib/exercise-overrides";
 import { getSessionExerciseReplacements, resolveReplacementExercises } from "@/src/server/session-exercise-replacements";
+import { logSyncMetric } from "@/src/server/sync-metrics";
 
 export async function POST(request: Request) {
   const body = await request.json();
   const sessionId = String(body.sessionId ?? "").trim();
   const forceComplete = Boolean(body.forceComplete);
+  const actionId = request.headers.get("x-traknio-action-id")?.trim() || undefined;
 
   if (!sessionId) {
     return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
   }
+  logSyncMetric({ event: "API_RECEIVED", sessionId, actionId, action: "complete-session", origin: "PHONE", transport: "HTTPS_PHONE" });
 
   const session = await prisma.workoutSession.findUnique({
     where: { id: sessionId },
@@ -56,6 +59,8 @@ export async function POST(request: Request) {
       where: { workoutSessionId: sessionId },
       select: { exerciseId: true, actualReps: true, actualWeightKg: true },
     });
+    logSyncMetric({ event: "DB_WRITE_COMPLETED", sessionId, actionId, action: "complete-session", origin: "PHONE", transport: "HTTPS_PHONE" });
+    logSyncMetric({ event: "API_CONFIRMED", sessionId, actionId, action: "complete-session", origin: "PHONE", transport: "HTTPS_PHONE", status: 200 });
     return NextResponse.json({
       ok: true,
       summary: {
@@ -193,6 +198,8 @@ export async function POST(request: Request) {
   revalidatePath("/dashboard");
   revalidatePath("/history");
 
+  logSyncMetric({ event: "DB_WRITE_COMPLETED", sessionId, actionId, action: "complete-session", origin: "PHONE", transport: "HTTPS_PHONE" });
+  logSyncMetric({ event: "API_CONFIRMED", sessionId, actionId, action: "complete-session", origin: "PHONE", transport: "HTTPS_PHONE", status: 200 });
   return NextResponse.json({
     ok: true,
     summary: {

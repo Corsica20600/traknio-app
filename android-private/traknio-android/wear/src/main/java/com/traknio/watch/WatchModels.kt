@@ -31,6 +31,7 @@ data class WatchExerciseSummary(
     val activeSetIndex: Int,
     val targetReps: Int,
     val weight: Double?,
+    val imageUrl: String? = null,
 )
 
 data class WatchSessionSummary(
@@ -49,6 +50,8 @@ data class RestDeadline(
     val deadlineElapsedMs: Long,
     val sourceRemainingSeconds: Int,
 )
+
+data class WatchSetConfirmation(val sessionId: String, val reps: Int, val weight: Double?, val nextExercise: String?)
 
 sealed interface WatchScreenState {
     data object Loading : WatchScreenState

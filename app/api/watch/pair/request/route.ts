@@ -8,7 +8,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "auth_required" }, { status: 401 });
   }
 
-  const body = await request.json().catch(() => ({}));
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   const result = await createTemporaryWatchPairingToken(profile, body.label);
   if (!result.ok) {
     return NextResponse.json({ ok: false, error: result.error }, { status: result.status });

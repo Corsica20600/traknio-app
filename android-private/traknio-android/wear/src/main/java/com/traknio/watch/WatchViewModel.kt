@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 
 class WatchViewModel(context: Context) : ViewModel() {
     private val appContext = context.applicationContext
@@ -30,6 +32,167 @@ class WatchViewModel(context: Context) : ViewModel() {
 
     private val _state = MutableStateFlow<WatchScreenState>(WatchScreenState.Loading)
     val state: StateFlow<WatchScreenState> = _state.asStateFlow()
+    private val _feedback = MutableStateFlow(WatchFeedbackState())
+    val feedback: StateFlow<WatchFeedbackState> = _feedback.asStateFlow()
+    private var feedbackRequest: Pair<String, String>? = null
+    fun submitFeedback(sessionId: String, rating: Int, note: String) {
+        if (_feedback.value.loading || latestPayload?.sessionId != sessionId || latestPayload?.status != "COMPLETED") return
+        val key = "$sessionId:$rating:$note"
+        val requestId = feedbackRequest?.takeIf { it.first == key }?.second ?: java.util.UUID.randomUUID().toString().also { feedbackRequest = key to it }
+        _feedback.value = WatchFeedbackState(sessionId, loading = true)
+        viewModelScope.launch {
+            try {
+                ensurePaired()
+                check(api.feedback(sessionId, rating, note, requestId))
+                _feedback.value = WatchFeedbackState(sessionId, saved = true)
+                insightsCache.clear()
+            } catch (error: Throwable) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                _feedback.value = WatchFeedbackState(sessionId, error = "Ressenti non confirmé. Réessaie.")
+            }
+        }
+    }
+    private val _insights = MutableStateFlow(WatchInsightsState())
+    val insights: StateFlow<WatchInsightsState> = _insights.asStateFlow()
+    private val insightsCache = mutableMapOf<String, Pair<Long, org.json.JSONObject>>()
+    private var insightsAccount: String? = null
+    private var insightsJob: Job? = null
+    fun closeInsights() {
+        insightsJob?.cancel()
+        _insights.value = WatchInsightsState(page = if (_insights.value.page == "menu") null else "menu")
+    }
+    fun openInsights(page: String) {
+        if (page in setOf("menu", "settings")) { insightsJob?.cancel(); _insights.value = WatchInsightsState(page = page); return }
+        if (page !in setOf("history", "statistics")) return
+        _insights.value = WatchInsightsState(page = page)
+        loadInsights()
+    }
+    fun refreshInsights() = loadInsights(force = true)
+    fun moreHistory() = loadInsights(more = true)
+    private fun loadInsights(force: Boolean = false, more: Boolean = false) {
+        val page = _insights.value.page?.takeIf { it in setOf("history", "statistics") } ?: return
+        if (_insights.value.loading) return
+        _insights.value = _insights.value.copy(loading = true, error = null)
+        insightsJob?.cancel()
+        insightsJob = viewModelScope.launch {
+            try {
+                ensurePaired()
+                val account = tokenStore.accountPairingId()
+                if (account != insightsAccount) {
+                    insightsCache.clear()
+                    insightsAccount = account
+                    _insights.value = WatchInsightsState(page = page, loading = true)
+                }
+                val cached = insightsCache[page]
+                if (!force && !more && cached != null && SystemClock.elapsedRealtime() - cached.first < 300_000) {
+                    _insights.value = _insights.value.copy(payload = cached.second)
+                    return@launch
+                }
+                val old = _insights.value.payload
+                val cursor = if (more && page == "history" && old?.isNull("nextCursor") == false) old.getString("nextCursor") else null
+                if (more && cursor == null) return@launch
+                val result = api.insights(page, cursor)
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                if (account != tokenStore.accountPairingId()) return@launch
+                if (cursor != null && old != null) {
+                    val merged = org.json.JSONArray()
+                    val seen = mutableSetOf<String>()
+                    for (list in listOf(old.getJSONArray("history"), result.getJSONArray("history"))) {
+                        for (index in 0 until list.length()) {
+                            val item = list.getJSONObject(index)
+                            if (seen.add(item.getString("id"))) merged.put(item)
+                        }
+                    }
+                    result.put("history", merged)
+                }
+                insightsCache[page] = SystemClock.elapsedRealtime() to result
+                _insights.value = _insights.value.copy(payload = result)
+            } catch (error: Throwable) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                _insights.value = _insights.value.copy(error = "Données indisponibles. Réessaie avec une connexion.")
+            } finally {
+                if (kotlinx.coroutines.currentCoroutineContext().isActive) _insights.value = _insights.value.copy(loading = false)
+            }
+        }
+    }
+    private val _setConfirmation = MutableStateFlow<WatchSetConfirmation?>(null)
+    val setConfirmation: StateFlow<WatchSetConfirmation?> = _setConfirmation.asStateFlow()
+    fun dismissSetConfirmation() { _setConfirmation.value = null }
+    private val _programLibrary = MutableStateFlow(WatchProgramLibrary())
+    val programLibrary: StateFlow<WatchProgramLibrary> = _programLibrary.asStateFlow()
+    private var programCacheAt = 0L
+    private var programAccountId: String? = null
+    private var pendingStart: Triple<String, String, String>? = null
+    private var sessionGeneration = 0L
+
+    fun openPrograms() { loadPrograms() }
+    fun closePrograms() { if (!_programLibrary.value.starting) _programLibrary.value = _programLibrary.value.copy(open = false) }
+    fun refreshPrograms() { loadPrograms(force = true) }
+    fun morePrograms() { loadPrograms(more = true) }
+
+    private fun loadPrograms(force: Boolean = false, more: Boolean = false) {
+        if (_programLibrary.value.loading || _programLibrary.value.starting) return
+        _programLibrary.value = _programLibrary.value.copy(open = true, loading = true, error = null)
+        viewModelScope.launch {
+            try {
+                ensurePaired()
+                val account = tokenStore.accountPairingId()
+                if (account != programAccountId) {
+                    _programLibrary.value = WatchProgramLibrary(open = true, loading = true)
+                    programCacheAt = 0L
+                    pendingStart = null
+                    programAccountId = account
+                }
+                if (!force && !more && programCacheAt > 0 && SystemClock.elapsedRealtime() - programCacheAt < 300_000) return@launch
+                val cursor = if (more) _programLibrary.value.nextCursor else null
+                if (more && cursor == null) return@launch
+                val page = api.programs(cursor)
+                _programLibrary.value = _programLibrary.value.copy(
+                    programs = (if (cursor != null) _programLibrary.value.programs + page.programs else page.programs).distinctBy { it.id },
+                    nextCursor = page.nextCursor)
+                programCacheAt = SystemClock.elapsedRealtime()
+            } catch (error: Throwable) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                _programLibrary.value = _programLibrary.value.copy(error = "Programmes indisponibles. Vérifie la connexion et réessaie.")
+            } finally { _programLibrary.value = _programLibrary.value.copy(loading = false) }
+        }
+    }
+
+    fun startProgram(programId: String, dayId: String) {
+        if (_programLibrary.value.starting || _programLibrary.value.loading) return
+        val request = pendingStart?.takeIf { it.first == programId && it.second == dayId }
+            ?: Triple(programId, dayId, java.util.UUID.randomUUID().toString()).also { pendingStart = it }
+        _programLibrary.value = _programLibrary.value.copy(starting = true, error = null)
+        sessionGeneration++ // Discard reads launched before this start request.
+        viewModelScope.launch {
+            try {
+                ensurePaired()
+                if (tokenStore.accountPairingId() != programAccountId) {
+                    pendingStart = null
+                    programCacheAt = 0L
+                    _programLibrary.value = WatchProgramLibrary(open = true, starting = true)
+                    throw IllegalStateException("program_account_changed")
+                }
+                val payload = api.startSession(programId, dayId, request.third)
+                pendingStart = null
+                newestRevisionMs = Long.MIN_VALUE
+                applyPayload(payload, "Synchronisé")
+                WatchWorkoutStateDataLayer.publish(appContext, payload, "start-session")
+                _programLibrary.value = _programLibrary.value.copy(open = false)
+                insightsJob?.cancel()
+                _insights.value = WatchInsightsState()
+                if (pollingJob?.isActive != true) startPolling()
+            } catch (error: Throwable) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                _programLibrary.value = _programLibrary.value.copy(error = when (error.message) {
+                    "program_day_empty" -> "Cette séance ne contient aucun exercice."
+                    "program_day_not_found" -> "Programme modifié. Actualise la liste."
+                    "program_account_changed" -> "Compte modifié. Actualise les programmes."
+                    else -> "Démarrage non confirmé. Réessaie : la même demande sera vérifiée."
+                })
+            } finally { _programLibrary.value = _programLibrary.value.copy(starting = false) }
+        }
+    }
 
     private var latestPayload: WatchPayload? = null
     private var latestKey: String? = null
@@ -70,6 +233,10 @@ class WatchViewModel(context: Context) : ViewModel() {
         viewModelScope.launch { fetchState(silent = false) }
     }
 
+    fun onForeground() {
+        if (_state.value is WatchScreenState.Empty) refresh()
+    }
+
     fun onExercisePermissionsUpdated() {
         val payload = latestPayload ?: return
         if (ongoingSessionMissing) return
@@ -89,6 +256,10 @@ class WatchViewModel(context: Context) : ViewModel() {
     fun validateSet(actualReps: Int, weight: Double?) = perform(
         "validate",
         optimistic = ::advanceOptimisticSet,
+        onSuccess = { before, after ->
+            _setConfirmation.value = WatchSetConfirmation(before.sessionId, actualReps.coerceAtLeast(1), weight?.coerceAtLeast(0.0),
+                after.exerciseName.takeIf { after.exerciseIndex != before.exerciseIndex && after.status == "IN_PROGRESS" })
+        },
     ) { payload ->
         api.validateSet(payload, actualReps.coerceAtLeast(1), weight?.coerceAtLeast(0.0))
     }
@@ -158,6 +329,7 @@ class WatchViewModel(context: Context) : ViewModel() {
             while (true) {
                 if ((latestPayload?.status) == "COMPLETED") break
                 delay(nextPollingDelayMs())
+                if (!ExerciseTrackingService.activityVisible && latestPayload?.status != "IN_PROGRESS") continue
                 fetchState(silent = true)
             }
         }
@@ -178,6 +350,8 @@ class WatchViewModel(context: Context) : ViewModel() {
     }
 
     private suspend fun fetchState(silent: Boolean) {
+        if (_programLibrary.value.starting) return
+        val generation = sessionGeneration
         // A background refresh must not overwrite an optimistic rest mutation before its
         // direct or relayed acknowledgement has supplied the authoritative timestamp.
         if (silent && restMutationPending) return
@@ -189,10 +363,13 @@ class WatchViewModel(context: Context) : ViewModel() {
 
         try {
             ensurePaired()
-            applyPayload(api.currentSession(latestPayload?.sessionId, bootstrap = latestPayload == null), syncLabel = "Sync OK")
+            val fetched = api.currentSession(latestPayload?.sessionId, bootstrap = latestPayload == null)
+            if (generation != sessionGeneration) return
+            applyPayload(fetched, syncLabel = "Sync OK")
             consumeStoredRelayResults()
             WatchWorkoutStateDataLayer.consumeLast(appContext)?.let(::applyRealtimeState)
         } catch (error: Throwable) {
+            if (generation != sessionGeneration) return
             if (isPairingRequired(error)) {
                 tokenStore.clear()
                 val recovered = runCatching {
@@ -210,6 +387,7 @@ class WatchViewModel(context: Context) : ViewModel() {
     private fun perform(
         actionId: String,
         optimistic: (() -> Unit)? = null,
+        onSuccess: ((WatchPayload, WatchPayload) -> Unit)? = null,
         action: suspend (WatchPayload) -> WatchPayload,
     ) {
         val payload = latestPayload ?: return
@@ -233,6 +411,7 @@ class WatchViewModel(context: Context) : ViewModel() {
                 ensurePaired()
                 val result = action(payload)
                 applyPayload(result, syncLabel = "Sync OK", confirmedRestMutation = mutatesRest)
+                onSuccess?.invoke(payload, result)
                 WatchWorkoutStateDataLayer.publish(appContext, result, actionId)
             } catch (error: Throwable) {
                 if (error is WatchRelayQueuedException) {
@@ -325,6 +504,10 @@ class WatchViewModel(context: Context) : ViewModel() {
     }
 
     private fun applyRelayResult(result: PhoneRelayResult) {
+        if (result.payload?.let { it.has("programs") || it.has("history") || it.has("statistics") || it.has("feedbackSaved") } == true) {
+            WatchRelayResultStore.remove(appContext, result.requestId)
+            return
+        }
         val ready = _state.value as? WatchScreenState.Ready ?: return
         if (result.isTerminal()) WatchRelayResultStore.remove(appContext, result.requestId)
         when (result.state) {
@@ -379,6 +562,7 @@ class WatchViewModel(context: Context) : ViewModel() {
             newestRestUpdatedAt = payload.restUpdatedAt
             restMutationPending = false
         }
+        if (payload.status == "COMPLETED") insightsCache.clear()
         latestPayload = payload
         ongoingSessionMissing = false
         WorkoutOngoingActivity.update(appContext, payload)
