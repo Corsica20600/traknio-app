@@ -1,5 +1,7 @@
 "use client";
 
+import { useWorkoutScreenAwake } from "./keep-screen-setting";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent, TouchEvent } from "react";
 import { useRouter } from "next/navigation";
@@ -549,35 +551,8 @@ export function GuidedWorkoutClient({
     });
   }, [activeKey, activeSet, activeSetIndex, exercise.plannedWeightKg, exerciseIndex, nextSetIndex, publishRealtimeState, repsByKey, restPaused, restRemaining, sessionId, weightByKey]);
 
-  useEffect(() => {
-    if (ending || summary || activeSetIndex == null || !activeKey) return;
-    let cancelled = false;
-    const refreshLiveTarget = async () => {
-      const params = new URLSearchParams({
-        sessionId,
-        exerciseId: exercise.id,
-        programExerciseId: exercise.programExerciseId ?? "",
-        setIndex: String(activeSetIndex),
-      });
-      const response = await fetch(`/api/workout/live-target?${params}`, { cache: "no-store" }).catch(() => null);
-      if (!response?.ok || cancelled) return;
-      const data = await response.json() as { target?: { targetReps?: number | null; targetWeightKg?: number | null } | null };
-      if (!data.target || cancelled) return;
-      if (Number.isFinite(data.target.targetReps)) {
-        setRepsByKey((previous) => previous[activeKey] === data.target!.targetReps ? previous : { ...previous, [activeKey]: data.target!.targetReps! });
-      }
-      if (Number.isFinite(data.target.targetWeightKg)) {
-        setWeightByKey((previous) => previous[activeKey] === data.target!.targetWeightKg ? previous : { ...previous, [activeKey]: data.target!.targetWeightKg! });
-      }
-    };
-    // The phone POSTs its own edits. This is only a low-frequency fallback for
-    // edits initiated on the watch; never poll Neon once per second.
-    void refreshLiveTarget();
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === "visible") void refreshLiveTarget();
-    }, 15_000);
-    return () => { cancelled = true; window.clearInterval(interval); };
-  }, [activeKey, activeSetIndex, ending, exercise.id, exercise.programExerciseId, sessionId, summary]);
+  // The session reconciliation below also carries reps and weight. No second
+  // polling loop is needed for live targets; keep POST edits immediate.
 
   useEffect(() => {
     if (restEndsAt == null || restPaused) return;
@@ -687,8 +662,14 @@ export function GuidedWorkoutClient({
   useEffect(() => {
     if (summary || ending) return;
     let alive = true;
+    let pollingInFlight = false;
+    let lastPollingStartedAt = 0;
 
     async function pullWatchState() {
+      // Focus, pageshow and native resume often arrive together.
+      if (!alive || document.visibilityState !== "visible" || pollingInFlight || Date.now() - lastPollingStartedAt < 2_000) return;
+      pollingInFlight = true;
+      lastPollingStartedAt = Date.now();
       try {
         const response = await fetch(`/api/watch/current-session?sessionId=${encodeURIComponent(sessionId)}`, {
           cache: "no-store",
@@ -703,6 +684,7 @@ export function GuidedWorkoutClient({
             restStatus?: "IDLE" | "ACTIVE" | "PAUSED";
             status?: string;
             revision?: string;
+            liveTarget?: { exerciseId: string; setIndex: number; targetReps?: number | null; targetWeightKg?: number | null } | null;
           };
         };
         const state = data.payload;
@@ -743,6 +725,19 @@ export function GuidedWorkoutClient({
         const setIndexFromWatch = Math.max(1, Number(state.setIndex ?? 1));
         const restFromWatch = Math.max(0, Number(state.restRemaining ?? 0));
         const restStatus = state.restStatus === "PAUSED" ? "PAUSED" : restFromWatch > 0 ? "ACTIVE" : "IDLE";
+        const targetExercise = exercises[exerciseIndexFromWatch];
+        const liveTarget = state.liveTarget;
+        if (targetExercise && liveTarget?.exerciseId === targetExercise.id && liveTarget.setIndex === setIndexFromWatch) {
+          const targetKey = `${targetExercise.id}:${setIndexFromWatch}`;
+          if (typeof liveTarget.targetReps === "number" && Number.isFinite(liveTarget.targetReps)) {
+            const reps = liveTarget.targetReps;
+            setRepsByKey(previous => previous[targetKey] === reps ? previous : { ...previous, [targetKey]: reps });
+          }
+          if (typeof liveTarget.targetWeightKg === "number" && Number.isFinite(liveTarget.targetWeightKg)) {
+            const weight = liveTarget.targetWeightKg;
+            setWeightByKey(previous => previous[targetKey] === weight ? previous : { ...previous, [targetKey]: weight });
+          }
+        }
         const guard = `${exerciseIndexFromWatch}:${setIndexFromWatch}:${restFromWatch}:${restStatus}`;
         if (lastSyncedWatchPositionRef.current === guard) return;
         lastSyncedWatchPositionRef.current = guard;
@@ -802,6 +797,8 @@ export function GuidedWorkoutClient({
         });
       } catch {
         // Keep local workout resilient if watch endpoint is temporarily unavailable.
+      } finally {
+        pollingInFlight = false;
       }
     }
 
@@ -1296,6 +1293,8 @@ export function GuidedWorkoutClient({
     const rest = minutes % 60;
     return rest ? `${hours} h ${String(rest).padStart(2, "0")}` : `${hours} h`;
   }
+
+  useWorkoutScreenAwake(!summary && !ending);
 
   if (summary) {
     return (

@@ -1,6 +1,7 @@
 import { prisma } from "@/src/lib/prisma";
 import { getExerciseDisplayName } from "@/src/lib/exercise-overrides";
 import { getOrCreateDemoProfile } from "@/src/server/fitness-queries";
+import type { Prisma } from "@prisma/client";
 
 type AiGoal = "MUSCLE_GAIN" | "FAT_LOSS" | "STRENGTH" | "RECOMPOSITION";
 type AiLevel = "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
@@ -15,7 +16,7 @@ export type AiProgramInput = {
   restrictions: string;
 };
 
-type ValidGeneratedProgram = {
+export type ValidGeneratedProgram = {
   programName: string;
   goal: AiGoal;
   days: Array<{
@@ -340,11 +341,12 @@ export async function generateAiProgram(input: AiProgramInput) {
   }
 }
 
-export async function saveGeneratedProgram(program: ValidGeneratedProgram) {
-  const profile = await getOrCreateDemoProfile();
+export async function saveGeneratedProgram(program: ValidGeneratedProgram, scope?: { userProfileId: string; db: Prisma.TransactionClient }) {
+  const userProfileId = scope?.userProfileId ?? (await getOrCreateDemoProfile()).id;
+  const db = scope?.db ?? prisma;
 
   const uniqueSlugs = [...new Set(program.days.flatMap((d) => d.exercises.map((e) => e.exerciseSlug)))];
-  const exercises = await prisma.exercise.findMany({
+  const exercises = await db.exercise.findMany({
     where: { slug: { in: uniqueSlugs }, isActive: true },
     select: { id: true, slug: true },
   });
@@ -355,9 +357,9 @@ export async function saveGeneratedProgram(program: ValidGeneratedProgram) {
     return { ok: false as const, error: "unknown_exercises", missing };
   }
 
-  const created = await prisma.program.create({
+  const created = await db.program.create({
     data: {
-      userProfileId: profile.id,
+      userProfileId,
       name: program.programName,
       goal: toProgramGoal(program.goal),
       level: "INTERMEDIATE",

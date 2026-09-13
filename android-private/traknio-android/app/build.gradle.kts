@@ -57,7 +57,7 @@ android {
         applicationId = "com.traknio.app"
         minSdk = 29
         targetSdk = 36
-        versionCode = 29
+        versionCode = 31
         versionName = "0.5.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

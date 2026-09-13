@@ -2,11 +2,15 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
 import { syncProgramExerciseTargets } from "@/src/server/program-target-sync";
 import { logSyncMetric } from "@/src/server/sync-metrics";
+import { getAuthenticatedUserProfile } from "@/src/server/fitness-queries";
+import { ownsAccessibleWorkout } from "@/src/server/workout-access";
 
 export async function POST(request: Request) {
   const body = await request.json();
 
   const sessionId = String(body.sessionId ?? "").trim();
+  const profile = await getAuthenticatedUserProfile();
+  if (!await ownsAccessibleWorkout(profile, sessionId)) return NextResponse.json({ error: "workout_access_denied" }, { status: 403 });
   const exerciseId = String(body.exerciseId ?? "").trim();
   const programExerciseId = String(body.programExerciseId ?? "").trim();
   const setIndex = Number(body.setIndex ?? 0);
@@ -38,6 +42,7 @@ export async function POST(request: Request) {
   });
   const latestPositiveWeightGlobal = await prisma.workoutSet.findFirst({
     where: {
+      workoutSession: { userProfileId: profile.id },
       exerciseId,
       actualWeightKg: { gt: 0 },
     },

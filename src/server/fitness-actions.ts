@@ -6,6 +6,8 @@ import { prisma } from "@/src/lib/prisma";
 import { getOrCreateDemoProfile } from "@/src/server/fitness-queries";
 import { markOnboardingStepForProfile } from "@/src/server/onboarding-actions";
 import { startOrResumeWorkout } from "@/src/server/workout-start";
+import { getAuthenticatedUserProfile } from "@/src/server/fitness-queries";
+import { ownsAccessibleWorkout } from "@/src/server/workout-access";
 
 export async function createSimpleProgramAction(formData: FormData) {
   const profile = await getOrCreateDemoProfile();
@@ -60,6 +62,8 @@ export async function startWorkoutSessionAction(formData: FormData) {
 
 export async function logWorkoutSetAction(formData: FormData) {
   const sessionId = String(formData.get("sessionId") ?? "").trim();
+  const profile = await getAuthenticatedUserProfile();
+  if (!await ownsAccessibleWorkout(profile, sessionId)) throw new Error("workout_access_denied");
   const exerciseId = String(formData.get("exerciseId") ?? "").trim();
   const reps = Number(formData.get("actualReps") ?? 0);
   const weight = Number(formData.get("actualWeightKg") ?? 0);
@@ -90,6 +94,8 @@ export async function logWorkoutSetAction(formData: FormData) {
 
 export async function completeWorkoutSessionAction(formData: FormData) {
   const sessionId = String(formData.get("sessionId") ?? "").trim();
+  const profile = await getAuthenticatedUserProfile();
+  if (!await ownsAccessibleWorkout(profile, sessionId, true)) throw new Error("workout_access_denied");
   if (!sessionId) return;
 
   const started = await prisma.workoutSession.findUnique({ where: { id: sessionId } });

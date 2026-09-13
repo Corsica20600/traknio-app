@@ -4,6 +4,49 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { getLatestWeightByExercise, validateWatchSet, getWatchBootstrapPayload } from "@/src/server/watch-mobile";
 import { watchImagePath } from "./watch-image";
+import { selectWatchLiveTarget, getWatchPayload } from "./watch-mobile";
+import { touchWatchPresence, WATCH_PRESENCE_INTERVAL_MS } from "./watch-presence";
+
+test("combined polling target is scoped to the exercise and set and preserves zero load", () => {
+  const target = { exerciseId: "bench", setIndex: 2, targetReps: 8, targetWeightKg: 0, updatedAt: "2026-09-13T12:00:00Z" };
+  const notes = JSON.stringify({ liveTargets: { pe: target } });
+  assert.deepEqual(selectWatchLiveTarget(notes, "pe", "bench", 2), target);
+  assert.equal(selectWatchLiveTarget(notes, "pe", "row", 2), null);
+  assert.equal(selectWatchLiveTarget(notes, "pe", "bench", 3), null);
+  assert.equal(selectWatchLiveTarget(null, "pe", "bench", 2), null);
+});
+
+test("lightweight state carries the phone target without another database read", async () => {
+  const reads: string[] = [];
+  const target = { exerciseId: "bench", setIndex: 2, targetReps: 9, targetWeightKg: 0, updatedAt: "2026-09-13T12:00:00Z" };
+  const db = {
+    workoutSession: { findUnique: async (args: { where: unknown }) => {
+      reads.push("session");
+      assert.deepEqual(args.where, { id: "session", userProfileId: "owner" });
+      return { id: "session", title: "Push", status: "IN_PROGRESS", notes: JSON.stringify({ liveTargets: { pe: target } }), programDayId: "day", updatedAt: new Date(target.updatedAt),
+        watchSession: { currentExerciseIndex: 0, currentSetIndex: 2, restStatus: "IDLE", restRemainingSeconds: 0, restUpdatedAt: null, lastSyncAt: new Date(target.updatedAt) } };
+    } },
+    programExercise: {
+      count: async () => { reads.push("count"); return 3; },
+      findFirst: async () => { reads.push("exercise"); return { id: "pe", exerciseId: "bench", sets: 3, repsMin: 8, repsText: "50 kg", exercise: { name: "Bench", nameFr: null, equipment: [], equipmentFr: [] } }; },
+    },
+    workoutSet: { findFirst: async () => { reads.push("set"); return null; } },
+  } as never;
+  const result = await getWatchPayload("session", "owner", db);
+  assert.deepEqual(result?.liveTarget, target);
+  assert.deepEqual(reads, ["session", "count", "exercise", "set"]);
+});
+
+test("presence avoids writes for fifteen minutes and conditionally updates stale devices", async () => {
+  const now = Date.parse("2026-09-13T12:00:00Z");
+  const calls: unknown[] = [];
+  const db = { watchDevice: { updateMany: async (args: unknown) => { calls.push(args); return { count: 1 }; } } } as never;
+  await touchWatchPresence({ id: "watch", lastSeenAt: new Date(now - 60_000) }, now, db);
+  await touchWatchPresence({ id: "watch", lastSeenAt: new Date(now - WATCH_PRESENCE_INTERVAL_MS) }, now, db);
+  assert.equal(calls.length, 0);
+  await touchWatchPresence({ id: "watch", lastSeenAt: null }, now, db);
+  assert.deepEqual(calls, [{ where: { id: "watch", revokedAt: null, OR: [{ lastSeenAt: null }, { lastSeenAt: { lt: new Date(now - WATCH_PRESENCE_INTERVAL_MS) } }] }, data: { lastSeenAt: new Date(now) } }]);
+});
 
 test("watch bootstrap reads one latest weight only for the exercises it needs", async () => {
   const calls: Array<{ sql: string; values: unknown[] }> = [];

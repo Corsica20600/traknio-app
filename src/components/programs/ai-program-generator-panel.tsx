@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrandSelect } from "@/src/components/ui/brand-select";
 import { PrimaryButton } from "@/src/components/ui/primary-button";
@@ -33,12 +33,25 @@ export function AiProgramGeneratorPanel() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<GeneratedProgram | null>(null);
   const [savedText, setSavedText] = useState("");
+  const [generationId, setGenerationId] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    void fetch("/api/programs/generate-ai", { cache: "no-store" }).then(response => response.ok ? response.json() : null).then(data => {
+      if (alive && data?.generation?.generatedProgram) {
+        setResult(data.generation.generatedProgram);
+        setGenerationId(data.generation.id);
+      }
+    }).catch(() => undefined).finally(() => { if (alive) setRestoring(false); });
+    return () => { alive = false; };
+  }, []);
 
   async function onGenerate(formData: FormData) {
+    if (restoring || loading) return;
     setLoading(true);
     setError("");
     setSavedText("");
-    setResult(null);
+    // Keep the previous successful preview if a retry is refused or fails.
 
     const payload = {
       goal: String(formData.get("goal") ?? "MUSCLE_GAIN"),
@@ -65,7 +78,9 @@ export function AiProgramGeneratorPanel() {
       const data = await response.json();
       if (!response.ok || !data?.ok) {
         if (data?.error === "ai_generation_limit_reached") {
-          setError(`Limite mensuelle atteinte : ${data.used}/${data.limit} programmes IA generes ce mois-ci.`);
+          setError(data.periodKey === "ACCOUNT_TRIAL"
+            ? "Ton programme IA inclus dans l’essai a déjà été généré ou est en cours de génération. Tu peux modifier ton programme manuellement."
+            : `Limite mensuelle atteinte : ${data.used}/${data.limit} programmes IA générés ce mois-ci.`);
           return;
         }
         if (data?.error === "missing_api_key") {
@@ -80,6 +95,7 @@ export function AiProgramGeneratorPanel() {
         return;
       }
       setResult(data.program);
+      setGenerationId(data.usage.usageId);
     } catch {
       setError("Erreur reseau pendant la generation IA.");
     } finally {
@@ -96,7 +112,7 @@ export function AiProgramGeneratorPanel() {
       const response = await fetch("/api/programs/save-ai", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ program: result }),
+        body: JSON.stringify({ program: result, generationId }),
       });
       const data = await response.json();
       if (!response.ok || !data?.ok) {
@@ -115,6 +131,7 @@ export function AiProgramGeneratorPanel() {
   return (
     <section className="card">
       <p className="eyebrow">IA programme</p>
+      <p className="muted">Essai de 7 jours : 1 génération réussie incluse. Abonnement : 4 générations par mois. Les modifications manuelles restent disponibles pendant ton accès.</p>
       <form action={onGenerate} className="form-grid">
         <BrandSelect
           name="goal"
@@ -139,7 +156,7 @@ export function AiProgramGeneratorPanel() {
         <input name="availableEquipment" className="input" placeholder="Materiel (csv) ex: halteres, barre, machine" />
         <input name="priorityMuscles" className="input" placeholder="Muscles prioritaires (csv)" />
         <input name="restrictions" className="input" placeholder="Douleurs / restrictions" />
-        <PrimaryButton type="submit" disabled={loading}>{loading ? "Generation..." : "Generer avec l IA"}</PrimaryButton>
+        <PrimaryButton type="submit" disabled={loading || restoring || saving}>{restoring ? "Récupération…" : loading ? "Génération…" : "Générer avec l’IA"}</PrimaryButton>
       </form>
 
       {error && <p className="muted mt-10">{error}</p>}
@@ -162,7 +179,7 @@ export function AiProgramGeneratorPanel() {
               </div>
             </section>
           ))}
-          <PrimaryButton type="button" onClick={onSave} disabled={saving}>
+          <PrimaryButton type="button" onClick={onSave} disabled={saving || loading}>
             {saving ? "Sauvegarde..." : "Sauvegarder ce programme"}
           </PrimaryButton>
         </div>

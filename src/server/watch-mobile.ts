@@ -6,10 +6,12 @@ import { getSessionExerciseReplacements, getSessionLiveTargets, parseSessionNote
 import { watchImagePath } from "./watch-image";
 import { clampRestSeconds, getSharedRestRemaining } from "@/src/server/shared-rest-timer";
 import { currentSyncMetricContext, logSyncMetric } from "@/src/server/sync-metrics";
+import type { SessionLiveTarget } from "./session-exercise-replacements";
 
 const DEFAULT_REPS = [12, 10, 10];
 
 type WatchPayload = {
+  liveTarget?: SessionLiveTarget | null;
   sessionId: string;
   workoutTitle: string;
   exerciseName: string;
@@ -423,6 +425,7 @@ export async function getWatchPayload(sessionId?: string, userProfileId?: string
       : { status: "IDLE" as const, remainingSeconds: 0, updatedAt: null };
     const restRemaining = getSharedRestRemaining(watchRest);
     return {
+      liveTarget: selectWatchLiveTarget(session.notes, `exercise:${exercise.id}`, exercise.id, setIndex),
       sessionId: session.id, workoutTitle: session.title, exerciseName: getExerciseDisplayName(exercise), exerciseIndex: exerciseIndex + 1,
       totalExercises: exercises.length, setIndex, totalSets: 3, targetReps: DEFAULT_REPS[Math.min(DEFAULT_REPS.length - 1, setIndex - 1)] ?? DEFAULT_REPS[0],
       weight: currentSet?.actualWeightKg ?? null, activeWeight: currentSet?.actualWeightKg ?? null, proposedWeight: null, weightConfirmationRequired: false,
@@ -460,6 +463,8 @@ export async function getWatchPayload(sessionId?: string, userProfileId?: string
   const activeWeight = currentSet?.actualWeightKg ?? plannedWeight ?? null;
 
   return {
+    liveTarget: selectWatchLiveTarget(session.notes, programExercise.id,
+      getSessionExerciseReplacements(session.notes)[programExercise.id]?.exerciseId ?? programExercise.exerciseId, setIndex),
     sessionId: session.id, workoutTitle: session.title, exerciseName: getExerciseDisplayName(programExercise.exercise),
     exerciseIndex: exerciseIndex + 1, totalExercises: Math.max(1, totalExercises), setIndex: Math.min(setIndex, Math.max(1, programExercise.sets)), totalSets: Math.max(1, programExercise.sets), targetReps,
     weight: currentSet?.actualWeightKg ?? liveWeight ?? activeWeight, activeWeight,
@@ -470,6 +475,11 @@ export async function getWatchPayload(sessionId?: string, userProfileId?: string
     status: session.status === "IN_PROGRESS" && session.watchSession?.status === "PAUSED" ? "READY_TO_COMPLETE" : session.status,
     exercises: [],
   };
+}
+
+export function selectWatchLiveTarget(notes: string | null, key: string, exerciseId: string, setIndex: number): SessionLiveTarget | null {
+  const target = getSessionLiveTargets(notes)[key];
+  return target?.exerciseId === exerciseId && target.setIndex === setIndex ? target : null;
 }
 
 export async function selectWatchExercise(sessionId: string, exerciseIndex: number, userProfileId?: string, db: WatchDatabase = prisma) {

@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     }
 
     const nextSets = Math.max(1, Math.min(12, Math.floor(nextSetsRaw)));
-    const profile = await getOrCreateDemoProfile();
+    const profile = await getOrCreateDemoProfile({ sessionId });
 
     const session = await prisma.workoutSession.findFirst({
       where: { id: sessionId, userProfileId: profile.id },
@@ -57,4 +57,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "internal_error" }, { status: 500 });
   }
 }
-

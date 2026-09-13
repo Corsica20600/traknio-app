@@ -1,6 +1,19 @@
 import { NextResponse } from "next/server";
 import { generateAiProgram } from "@/src/server/ai-program-generator";
 import { completeAiProgramGeneration, reserveAiProgramGeneration } from "@/src/server/ai-generation-limits";
+import { getAuthenticatedUserProfile } from "@/src/server/fitness-queries";
+import { prisma } from "@/src/lib/prisma";
+
+export async function GET() {
+  const profile = await getAuthenticatedUserProfile().catch(() => null);
+  if (!profile) return NextResponse.json({ error: "auth_required" }, { status: 401 });
+  const generation = await prisma.aiProgramGeneration.findFirst({
+    where: { userProfileId: profile.id, status: "SUCCESS", savedProgramId: null },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, generatedProgram: true },
+  });
+  return NextResponse.json({ generation }, { headers: { "Cache-Control": "no-store" } });
+}
 
 export async function POST(request: Request) {
   const body = await request.json();
@@ -34,21 +47,26 @@ export async function POST(request: Request) {
     );
   }
 
-  const result = await generateAiProgram({
-    goal: goal as "MUSCLE_GAIN" | "FAT_LOSS" | "STRENGTH" | "RECOMPOSITION",
-    level: level as "BEGINNER" | "INTERMEDIATE" | "ADVANCED",
-    daysPerWeek: 1,
-    sessionDurationMin: Number.isFinite(sessionDurationMin) ? Math.max(25, Math.min(120, Math.floor(sessionDurationMin))) : 60,
-    availableEquipment,
-    priorityMuscles,
-    restrictions,
-  });
+  try {
+    const result = await generateAiProgram({
+      goal: goal as "MUSCLE_GAIN" | "FAT_LOSS" | "STRENGTH" | "RECOMPOSITION",
+      level: level as "BEGINNER" | "INTERMEDIATE" | "ADVANCED",
+      daysPerWeek: 1,
+      sessionDurationMin: Number.isFinite(sessionDurationMin) ? Math.max(25, Math.min(120, Math.floor(sessionDurationMin))) : 60,
+      availableEquipment,
+      priorityMuscles,
+      restrictions,
+    });
 
-  await completeAiProgramGeneration(reservation.usageId, result.ok);
+    await completeAiProgramGeneration(reservation.usageId, result.ok, result.ok ? result.program : undefined);
 
-  if (!result.ok) {
-    return NextResponse.json({ ...result, usage: reservation }, { status: 422 });
+    if (!result.ok) {
+      return NextResponse.json({ ...result, usage: reservation }, { status: 422 });
+    }
+
+    return NextResponse.json({ ...result, usage: reservation });
+  } catch {
+    await completeAiProgramGeneration(reservation.usageId, false);
+    return NextResponse.json({ ok: false, error: "generation_failed", message: "La génération n’a pas pu être confirmée. Recharge la page pour retrouver un éventuel aperçu enregistré." }, { status: 503 });
   }
-
-  return NextResponse.json({ ...result, usage: reservation });
 }

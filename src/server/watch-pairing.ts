@@ -10,6 +10,8 @@ type PairingProfile = {
   email: string | null;
   subscriptionStatus: string;
   subscriptionCurrentPeriodEnd: Date | null;
+  trialStartedAt?: Date | null;
+  trialEndsAt?: Date | null;
 };
 
 export function createAccountPairingId(profile: Pick<PairingProfile, "id">) {
@@ -78,6 +80,8 @@ export async function completeWatchPairing(pairingToken: string, labelValue: unk
           email: true,
           subscriptionStatus: true,
           subscriptionCurrentPeriodEnd: true,
+          trialStartedAt: true,
+          trialEndsAt: true,
         },
       },
     },

@@ -73,7 +73,7 @@ android {
         applicationId = "com.traknio.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 33
+        versionCode = 36
         versionName = "0.5.8"
 
         val syncBaseUrl = propertyValue("TRAKNIO_SYNC_BASE_URL")
@@ -86,7 +86,8 @@ android {
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
             }
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

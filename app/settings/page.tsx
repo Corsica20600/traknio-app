@@ -4,7 +4,9 @@ import { AppShell } from "@/src/components/ui/app-shell";
 import { GlassCard } from "@/src/components/ui/glass-card";
 import { PageHeader } from "@/src/components/ui/page-header";
 import { BRAND } from "@/src/lib/brand";
-import { getFreeAccessEmails, hasPremiumAccess } from "@/src/lib/premium-access-rules";
+import { getFreeAccessEmails, hasPremiumAccess, hasActiveAccountTrial, hasSubscriptionAccess } from "@/src/lib/premium-access-rules";
+import { activateAccountTrial } from "@/src/server/trial-actions";
+import { KeepScreenSetting } from "@/src/components/workout/keep-screen-setting";
 import { isStripeConfigured } from "@/src/lib/stripe";
 import { privatePageMetadata } from "@/src/lib/private-page-metadata";
 import { deleteAccountAction } from "@/src/server/account-actions";
@@ -148,16 +150,13 @@ export default async function SettingsPage(props: SettingsPageProps) {
   const connected = Boolean(session?.user?.email);
   const stripeConfigured = isStripeConfigured();
   const subscriptionStatus = accountData.profile.subscriptionStatus;
-  const subscriptionHasKnownEnd = Boolean(accountData.profile.subscriptionCurrentPeriodEnd);
-  const subscriptionActive =
-    subscriptionStatus === "ACTIVE"
-    || subscriptionStatus === "TRIALING"
-    || (subscriptionStatus === "PAST_DUE" && subscriptionHasKnownEnd)
-    || (subscriptionStatus === "CANCELED" && subscriptionHasKnownEnd);
+  const subscriptionActive = hasSubscriptionAccess({ ...accountData.profile, email: null });
   const internalFreeAccess = getFreeAccessEmails().has(email.trim().toLowerCase());
   const premiumAccess = hasPremiumAccess(accountData.profile);
   const entitlementActive = subscriptionActive || internalFreeAccess;
-  const subscriptionLabel = internalFreeAccess && !subscriptionActive ? "Actif" : getSubscriptionLabel(subscriptionStatus);
+  const subscriptionLabel = internalFreeAccess && !subscriptionActive ? "Actif"
+    : hasActiveAccountTrial(accountData.profile) && !subscriptionActive ? "Essai gratuit actif"
+    : getSubscriptionLabel(subscriptionStatus);
   const canOpenPortal = Boolean(accountData.profile.stripeCustomerId);
   const spotify = accountData.integrations.find((item) => item.provider === "SPOTIFY");
   const healthConnect = accountData.integrations.find((item) => item.provider === "HEALTH_CONNECT");
@@ -210,6 +209,17 @@ export default async function SettingsPage(props: SettingsPageProps) {
       </GlassCard>
 
       <GlassCard className="settings-billing-card" elevated>
+        {!premiumAccess && !accountData.profile.trialStartedAt && accountData.profile.subscriptionStatus === "FREE" ? (
+          <form action={activateAccountTrial}>
+            <h2>Découvre Traknio pendant 7 jours</h2>
+            <p>Un programme généré par IA inclus, modifiable manuellement. Essai commun au téléphone et à la montre, sans renouvellement automatique.</p>
+            <button type="submit" className="primary-button">Activer mes 7 jours gratuits</button>
+          </form>
+        ) : null}
+        {accountData.profile.trialEndsAt ? (
+          <p>{hasActiveAccountTrial(accountData.profile) ? "Essai actif jusqu’au " : "Essai terminé le "}{formatDate(accountData.profile.trialEndsAt)} · 1 programme IA pendant l’essai.</p>
+        ) : null}
+        <KeepScreenSetting />
         <div>
           <p className="eyebrow">Abonnement</p>
           <h2>{BRAND.name}</h2>

@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   const programExerciseId = searchParams.get("programExerciseId")?.trim() ?? "";
   const setIndex = Math.max(1, Math.floor(Number(searchParams.get("setIndex") ?? 1)));
   if (!sessionId || !exerciseId) return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
-  const profile = await getOrCreateDemoProfile();
+  const profile = await getOrCreateDemoProfile({ sessionId });
   const session = await prisma.workoutSession.findFirst({ where: { id: sessionId, userProfileId: profile.id, status: "IN_PROGRESS" } });
   if (!session) return NextResponse.json({ error: "session_not_found" }, { status: 404 });
   const target = parseSessionNotesMeta(session.notes).liveTargets?.[programExerciseId || `exercise:${exerciseId}`];
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_target" }, { status: 400 });
   }
 
-  const profile = await getOrCreateDemoProfile();
+  const profile = await getOrCreateDemoProfile({ sessionId });
   const session = await prisma.workoutSession.findFirst({
     where: { id: sessionId, userProfileId: profile.id, status: "IN_PROGRESS" },
     include: { watchSession: true },

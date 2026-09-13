@@ -27,6 +27,8 @@ export async function requireHealthSyncAccess(
             email: true,
             subscriptionStatus: true,
             subscriptionCurrentPeriodEnd: true,
+            trialStartedAt: true,
+            trialEndsAt: true,
           },
         },
       },

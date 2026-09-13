@@ -43,6 +43,7 @@ class MainActivity : AppCompatActivity() {
     private var fileChooserCallback: android.webkit.ValueCallback<Array<Uri>>? = null
     private var isInitialPageLoad = true
     private var workoutStateReceiverRegistered = false
+    private var workoutScreenAwakeRequested = false
     private val workoutStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: Intent?) {
             val raw = intent?.getStringExtra(WorkoutStateDataLayer.EXTRA_STATE_JSON) ?: return
@@ -50,6 +51,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
     private val workoutStateBridge = object {
+        @JavascriptInterface
+        fun setScreenAwake(enabled: Boolean) {
+            runOnUiThread {
+                val uri = runCatching { Uri.parse(binding.webViewTraknio.url.orEmpty()) }.getOrNull()
+                if (uri?.host?.lowercase() !in allowedHosts || uri?.path != "/workout") return@runOnUiThread
+                workoutScreenAwakeRequested = enabled
+                updateWorkoutScreenPolicy(binding.webViewTraknio.url)
+            }
+        }
         @JavascriptInterface
         fun publish(raw: String) {
             val currentHost = runCatching { Uri.parse(binding.webViewTraknio.url.orEmpty()).host?.lowercase() }.getOrNull()
@@ -124,7 +134,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (::binding.isInitialized) {
+            binding.webViewTraknio.keepScreenOn = false
             binding.webViewTraknio.onPause()
             CookieManager.getInstance().flush()
             unregisterWorkoutStateReceiver()
@@ -214,6 +226,7 @@ class MainActivity : AppCompatActivity() {
         binding.webViewTraknio.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 super.onPageStarted(view, url, favicon)
+                workoutScreenAwakeRequested = false
                 updateWorkoutScreenPolicy(url)
                 binding.webErrorPanel.visibility = View.GONE
                 binding.webLoading.visibility = View.VISIBLE
@@ -282,7 +295,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateWorkoutScreenPolicy(url: String?) {
         val uri = runCatching { Uri.parse(url.orEmpty()) }.getOrNull()
-        val keepScreenOn = uri?.path?.startsWith("/workout") == true
+        val workoutPage = uri?.host?.lowercase() in allowedHosts && uri?.path == "/workout"
+        if (!workoutPage) workoutScreenAwakeRequested = false
+        val keepScreenOn = workoutPage && workoutScreenAwakeRequested
         binding.webViewTraknio.keepScreenOn = keepScreenOn
         if (keepScreenOn) {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

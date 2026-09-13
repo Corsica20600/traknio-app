@@ -427,15 +427,13 @@ function getProfileDisplayName(name: string | null | undefined, email: string) {
   return emailName || "Utilisateur Traknio";
 }
 
-export async function getOrCreateDemoProfile() {
-  const session = await auth().catch(() => null);
-  const activeEmail = normalizeEmail(session?.user?.email) ?? PRIMARY_USER_EMAIL;
-  const displayName = session?.user?.email
-    ? getProfileDisplayName(session.user.name, activeEmail)
-    : "Erwan";
-
-  const profile = await getOrCreateProfileForEmail(activeEmail, displayName);
+export async function getOrCreateDemoProfile(workout?: { sessionId?: string; resume?: boolean }) {
+  const profile = await getAuthenticatedUserProfile();
   if (!hasPremiumAccess(profile)) {
+    if (workout?.sessionId || workout?.resume) {
+      const { canAccessExistingWorkout } = await import("./workout-access");
+      if (await canAccessExistingWorkout(profile, workout.sessionId)) return profile;
+    }
     redirect("/settings?access=premium");
   }
 
@@ -838,7 +836,7 @@ export async function getExerciseOptionsForPrograms(limit = 300) {
 }
 
 export async function getWorkoutHistoryForDemoUser() {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await getAuthenticatedUserProfile();
 
   return prisma.workoutSession.findMany({
     where: { userProfileId: profile.id },
@@ -932,7 +930,7 @@ export async function getHistoryVisualFallback() {
 }
 
 export async function getWorkoutSessionDetailForDemoUser(sessionId: string) {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await getAuthenticatedUserProfile();
 
   const session = await prisma.workoutSession.findFirst({
     where: { id: sessionId, userProfileId: profile.id },
@@ -1010,7 +1008,7 @@ export async function getWorkoutSessionDetailForDemoUser(sessionId: string) {
 }
 
 export async function getWorkoutPageData() {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await getOrCreateDemoProfile({ resume: true });
 
   let exercises: ExerciseWithFrCompat[] = [];
   const [programs, currentSession, latestProgramSession] = await Promise.all([

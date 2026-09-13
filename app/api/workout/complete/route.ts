@@ -4,10 +4,14 @@ import { prisma } from "@/src/lib/prisma";
 import { getExerciseDisplayName } from "@/src/lib/exercise-overrides";
 import { getSessionExerciseReplacements, resolveReplacementExercises } from "@/src/server/session-exercise-replacements";
 import { logSyncMetric } from "@/src/server/sync-metrics";
+import { getAuthenticatedUserProfile } from "@/src/server/fitness-queries";
+import { ownsAccessibleWorkout } from "@/src/server/workout-access";
 
 export async function POST(request: Request) {
   const body = await request.json();
   const sessionId = String(body.sessionId ?? "").trim();
+  const profile = await getAuthenticatedUserProfile();
+  if (!await ownsAccessibleWorkout(profile, sessionId, true)) return NextResponse.json({ error: "workout_access_denied" }, { status: 403 });
   const forceComplete = Boolean(body.forceComplete);
   const actionId = request.headers.get("x-traknio-action-id")?.trim() || undefined;
 

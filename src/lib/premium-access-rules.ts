@@ -1,4 +1,21 @@
-const ENTITLED_STATUSES = new Set(["ACTIVE", "TRIALING"]);
+export const ACCOUNT_TRIAL_MS = 7 * 24 * 60 * 60 * 1000;
+
+export type AccessProfile = {
+  email: string | null | undefined;
+  subscriptionStatus: string;
+  subscriptionCurrentPeriodEnd: Date | null;
+  trialStartedAt?: Date | null;
+  trialEndsAt?: Date | null;
+};
+
+export function accountTrialEnd(profile: AccessProfile): number {
+  if (!profile.trialStartedAt || !profile.trialEndsAt) return 0;
+  return Math.min(profile.trialEndsAt.getTime(), profile.trialStartedAt.getTime() + ACCOUNT_TRIAL_MS);
+}
+
+export function hasActiveAccountTrial(profile: AccessProfile, now = Date.now()) {
+  return !!profile.trialStartedAt && profile.trialStartedAt.getTime() <= now && accountTrialEnd(profile) > now;
+}
 
 export function getFreeAccessEmails() {
   return new Set(
@@ -9,16 +26,16 @@ export function getFreeAccessEmails() {
   );
 }
 
-export function hasPremiumAccess(profile: {
-  email: string | null | undefined;
-  subscriptionStatus: string;
-  subscriptionCurrentPeriodEnd: Date | null;
-}) {
+export function hasSubscriptionAccess(profile: AccessProfile, now = Date.now()) {
   const email = profile.email?.trim().toLowerCase();
   if (email && getFreeAccessEmails().has(email)) return true;
-  if (ENTITLED_STATUSES.has(profile.subscriptionStatus)) return true;
+  if (profile.subscriptionStatus === "ACTIVE") return true;
 
   const entitlementEnd = profile.subscriptionCurrentPeriodEnd?.getTime() ?? 0;
-  return entitlementEnd > Date.now()
-    && (profile.subscriptionStatus === "PAST_DUE" || profile.subscriptionStatus === "CANCELED");
+  return entitlementEnd > now
+    && ["TRIALING", "PAST_DUE", "CANCELED"].includes(profile.subscriptionStatus);
+}
+
+export function hasPremiumAccess(profile: AccessProfile, now = Date.now()) {
+  return hasSubscriptionAccess(profile, now) || hasActiveAccountTrial(profile, now);
 }

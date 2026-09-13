@@ -206,8 +206,8 @@ internal fun WorkoutSetEntry(payload: WatchPayload, enabled: Boolean, error: Str
     WorkoutPage {
         WorkoutHeading("Série ${payload.setIndex} / ${payload.totalSets}")
         WorkoutStepper(if (payload.isBodyweight && weight == 0.0) "Corps" else wearWeight(weight), "kg", enabled,
-            onMinus = { weight = (weight - 2.5).coerceAtLeast(0.0); edited = true },
-            onPlus = { weight += 2.5; edited = true })
+            onMinus = { weight = (weight - 1.0).coerceAtLeast(0.0); edited = true },
+            onPlus = { weight += 1.0; edited = true })
         WorkoutStepper("$reps", "rép.", enabled,
             onMinus = { reps = (reps - 1).coerceAtLeast(1); edited = true },
             onPlus = { reps++; edited = true })

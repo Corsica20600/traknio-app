@@ -6,8 +6,11 @@ import android.os.SystemClock
 import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
@@ -64,6 +67,14 @@ private object WorkoutImageCache {
 internal fun WorkoutIllustration(url: String?, exerciseName: String) {
     if (url.isNullOrBlank()) return
     val bitmap by produceState<Bitmap?>(null, url) { value = WorkoutImageCache.load(url) }
-    bitmap?.let { Image(it.asImageBitmap(), "Illustration : $exerciseName",
-        Modifier.fillMaxWidth(0.8f).height(76.dp), contentScale = ContentScale.Fit) }
+    bitmap?.let { image ->
+        BoxWithConstraints(Modifier.fillMaxWidth(0.8f).height(76.dp), contentAlignment = Alignment.Center) {
+            val ratio = image.width.toFloat() / image.height
+            val imageWidth = minOf(maxWidth, maxHeight * ratio)
+            // Clip the image itself, not the empty space around a fitted image.
+            Image(image.asImageBitmap(), "Illustration : $exerciseName",
+                Modifier.size(imageWidth, imageWidth / ratio).clip(RoundedCornerShape(10.dp)),
+                contentScale = ContentScale.Fit)
+        }
+    }
 }

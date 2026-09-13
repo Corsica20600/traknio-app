@@ -71,6 +71,21 @@ private fun TraknioWearApp() {
     }
     val activeSessionId = (state as? WatchScreenState.Ready)?.payload
         ?.takeIf { it.status == "IN_PROGRESS" || it.status == "READY_TO_COMPLETE" }?.sessionId
+    DisposableEffect(activity, activeSessionId) {
+        val prefs = context.getSharedPreferences("screen_preferences", android.content.Context.MODE_PRIVATE)
+        fun applyPolicy() {
+            if (activeSessionId != null && prefs.getBoolean("keep_awake", false)) {
+                activity?.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            } else activity?.window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> applyPolicy() }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        applyPolicy()
+        onDispose {
+            prefs.unregisterOnSharedPreferenceChangeListener(listener)
+            activity?.window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
     LaunchedEffect(activeSessionId) {
         if (activeSessionId == null || activity == null) return@LaunchedEffect
         val healthPermissions = if ((state as? WatchScreenState.Ready)?.payload?.status == "IN_PROGRESS") {

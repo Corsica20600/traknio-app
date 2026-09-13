@@ -57,7 +57,7 @@ function scoreAlternative(current: ExerciseOption, candidate: ExerciseOption) {
 }
 
 async function findSessionForUser(sessionId: string) {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await getOrCreateDemoProfile({ sessionId });
   return prisma.workoutSession.findFirst({
     where: { id: sessionId, userProfileId: profile.id, status: "IN_PROGRESS" },
     include: { watchSession: true },

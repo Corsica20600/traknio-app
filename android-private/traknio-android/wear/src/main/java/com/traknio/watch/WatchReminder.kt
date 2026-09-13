@@ -61,6 +61,8 @@ class WatchReminderReceiver : BroadcastReceiver() {
 @Composable
 internal fun WorkoutSettings(onBack: () -> Unit) {
     val context = LocalContext.current
+    val screenPrefs = remember { context.getSharedPreferences("screen_preferences", android.content.Context.MODE_PRIVATE) }
+    var keepAwake by remember { mutableStateOf(screenPrefs.getBoolean("keep_awake", false)) }
     var enabled by remember { mutableStateOf(WatchReminder.prefs(context).getBoolean("enabled", false)) }
     var hour by remember { mutableIntStateOf(WatchReminder.prefs(context).getInt("hour", 18)) }
     var denied by remember { mutableStateOf(false) }
@@ -70,7 +72,13 @@ internal fun WorkoutSettings(onBack: () -> Unit) {
     }
     androidx.activity.compose.BackHandler(onBack = onBack)
     WorkoutPage {
-        WorkoutHeading("Paramètres", "Rappel quotidien")
+        WorkoutHeading("Paramètres", "Écran pendant la séance")
+        WorkoutPill(if (keepAwake) "Écran allumé : oui" else "Écran allumé : non") {
+            keepAwake = !keepAwake
+            screenPrefs.edit().putBoolean("keep_awake", keepAwake).apply()
+        }
+        Text("Uniquement pendant la séance, app visible. Consomme davantage de batterie.", color = WatchPalette.Muted, fontSize = 11.sp)
+        WorkoutHeading("Rappel quotidien")
         Text(String.format(java.util.Locale.FRANCE, "%02d:00", hour), color = WatchPalette.Green, fontSize = 30.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             WorkoutCircle("−", "Une heure plus tôt") { hour = (hour + 23) % 24; WatchReminder.configure(context, enabled, hour) }

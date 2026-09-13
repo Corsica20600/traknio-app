@@ -5,6 +5,15 @@ import { resolve } from "node:path";
 
 const workspace = process.cwd();
 
+test("phone uses one polling endpoint for state and live target with overlap protection", () => {
+  const source = readFileSync(resolve(workspace, "src/components/workout/guided-workout-client.tsx"), "utf8");
+  assert.doesNotMatch(source, /refreshLiveTarget|fetch\(`\/api\/workout\/live-target\?/);
+  assert.match(source, /const liveTarget = state.liveTarget/);
+  assert.match(source, /liveTarget\?\.exerciseId === targetExercise.id/);
+  assert.match(source, /pollingInFlight = true/);
+  assert.match(source, /finally \{\s*pollingInFlight = false/);
+});
+
 test("returning to an active workout reconciles lightweight state without a Server Component refresh", () => {
   const source = readFileSync(resolve(workspace, "src/components/workout/guided-workout-client.tsx"), "utf8");
   const lifecycleBlock = source.slice(
