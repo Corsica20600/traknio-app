@@ -7551,19 +7551,22 @@ summary:focus-visible {
   mask-image: linear-gradient(180deg, rgba(0, 0, 0, .78), rgba(0, 0, 0, .16) 72%, transparent);
 }
 
-/* The Lat Pulldown pilot is intentionally an anthracite technical sheet,
-   separate from the blue public-site atmosphere. */
+/* The Lat Pulldown pilot keeps the standard app chrome and color system. */
 body:has(.latPulldownPilot) {
-  background: #121416;
+  background: #020611;
 }
 
-body:has(.latPulldownPilot)::before,
-.trk-public.latPulldownPilot::before {
-  display: none;
+.app-shell:has(.latPulldownPilot) > .app-topbar {
+  display: flex;
+  margin-inline: 16px;
 }
 
 .trk-public.latPulldownPilot {
-  background: #121416;
+  background:
+    radial-gradient(780px 520px at 76% 7%, rgba(29, 141, 255, .16), transparent 64%),
+    radial-gradient(720px 500px at 8% 24%, rgba(133, 72, 255, .14), transparent 62%),
+    linear-gradient(180deg, rgba(4, 9, 21, .78), rgba(2, 6, 18, 1) 46%),
+    var(--trk-bg);
 }
 
 .trk-public > * {

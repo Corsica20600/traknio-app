@@ -26,7 +26,7 @@ export function LatPulldownMachinePilot({
 }) {
   return (
     <article className={`trk-public latPulldownPilot ${styles.screen}`} aria-label="Fiche technique Lat Pulldown Machine">
-      <ExerciseHero canonicalName={guide.canonicalName} displayNameFr={guide.displayNameFr} badges={[guide.category, guide.equipment, guide.movementPattern, guide.exerciseType]} />
+      <ExerciseHero canonicalName={guide.canonicalName} displayNameFr={guide.displayNameFr} badges={[guide.category, guide.equipment, guide.movementPattern, guide.exerciseType]} showBranding={false} />
       <div className={styles.flow}>
         <ExerciseWhy>{guide.why}</ExerciseWhy>
         <ExerciseDemo start={guide.mediaStart} end={guide.mediaEnd} animation={guide.mediaAnimation} />
