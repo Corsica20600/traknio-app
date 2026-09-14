@@ -7559,7 +7559,7 @@ body:has(.latPulldownPilot) {
 .app-shell:has(.latPulldownPilot) > .app-topbar {
   display: flex;
   margin-inline: 16px;
-  padding-top: 12px;
+  padding-top: 22px;
 }
 
 .trk-public.latPulldownPilot {
