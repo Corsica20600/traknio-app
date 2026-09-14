@@ -7,7 +7,7 @@ type ActiveProgramCardProps = {
     name: string;
     description: string | null;
     sessionsPerWeek: number;
-    days: Array<{ id: string; title: string; exercises: unknown[] }>;
+    days: Array<{ id: string; title: string }>;
   } | null;
   totalExercises: number;
   nextSessionTitle?: string | null;

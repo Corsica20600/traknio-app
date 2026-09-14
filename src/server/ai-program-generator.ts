@@ -156,11 +156,11 @@ function validateGeneratedProgram(data: unknown): { valid: true; value: ValidGen
   if (!data || typeof data !== "object") return { valid: false, reason: "root_not_object" };
   const root = data as Record<string, unknown>;
 
-  if (!isNonEmptyString(root.programName)) return { valid: false, reason: "missing_program_name" };
+  if (!isNonEmptyString(root.programName) || root.programName.length > 100) return { valid: false, reason: "missing_program_name" };
   if (!["MUSCLE_GAIN", "FAT_LOSS", "STRENGTH", "RECOMPOSITION"].includes(String(root.goal))) {
     return { valid: false, reason: "invalid_goal" };
   }
-  if (!Array.isArray(root.days) || root.days.length === 0) return { valid: false, reason: "invalid_days" };
+  if (!Array.isArray(root.days) || root.days.length === 0 || root.days.length > 7) return { valid: false, reason: "invalid_days" };
   if (!Array.isArray(root.exercises)) return { valid: false, reason: "invalid_exercises_list" };
   if (!isNonEmptyString(root.notes)) return { valid: false, reason: "missing_notes" };
 
@@ -168,18 +168,20 @@ function validateGeneratedProgram(data: unknown): { valid: true; value: ValidGen
   const normalizedDays: ValidGeneratedProgram["days"] = [];
 
   for (const day of days) {
-    if (!Number.isFinite(Number(day.dayIndex))) return { valid: false, reason: "invalid_day_index" };
-    if (!isNonEmptyString(day.title)) return { valid: false, reason: "invalid_day_title" };
-    if (!isNonEmptyString(day.notes)) return { valid: false, reason: "invalid_day_notes" };
-    if (!Array.isArray(day.exercises) || day.exercises.length === 0) return { valid: false, reason: "invalid_day_exercises" };
+    if (!day || typeof day !== "object") return { valid: false, reason: "invalid_day" };
+    if (!Number.isInteger(Number(day.dayIndex)) || Number(day.dayIndex) < 1 || Number(day.dayIndex) > 7) return { valid: false, reason: "invalid_day_index" };
+    if (!isNonEmptyString(day.title) || day.title.length > 100) return { valid: false, reason: "invalid_day_title" };
+    if (!isNonEmptyString(day.notes) || day.notes.length > 5000) return { valid: false, reason: "invalid_day_notes" };
+    if (!Array.isArray(day.exercises) || day.exercises.length === 0 || day.exercises.length > 30) return { valid: false, reason: "invalid_day_exercises" };
 
     const exercises = day.exercises as Array<Record<string, unknown>>;
     const normalizedExercises: ValidGeneratedProgram["days"][number]["exercises"] = [];
     for (const ex of exercises) {
+      if (!ex || typeof ex !== "object") return { valid: false, reason: "invalid_exercise" };
       if (!isNonEmptyString(ex.exerciseSlug)) return { valid: false, reason: "invalid_exercise_slug" };
-      if (!Number.isFinite(Number(ex.sets)) || Number(ex.sets) < 1) return { valid: false, reason: "invalid_sets" };
-      if (!isNonEmptyString(ex.reps)) return { valid: false, reason: "invalid_reps" };
-      if (!Number.isFinite(Number(ex.restSeconds)) || Number(ex.restSeconds) < 15) return { valid: false, reason: "invalid_rest" };
+      if (!Number.isInteger(Number(ex.sets)) || Number(ex.sets) < 1 || Number(ex.sets) > 12) return { valid: false, reason: "invalid_sets" };
+      if (!isNonEmptyString(ex.reps) || ex.reps.length > 500 || (isNonEmptyString(ex.tempo) && ex.tempo.length > 100)) return { valid: false, reason: "invalid_reps" };
+      if (!Number.isInteger(Number(ex.restSeconds)) || Number(ex.restSeconds) < 15 || Number(ex.restSeconds) > 600) return { valid: false, reason: "invalid_rest" };
 
       normalizedExercises.push({
         exerciseSlug: String(ex.exerciseSlug).trim(),
@@ -206,6 +208,8 @@ function validateGeneratedProgram(data: unknown): { valid: true; value: ValidGen
     exercises: (root.exercises as unknown[]).map((x) => String(x)).filter((x) => x.trim().length > 0),
     notes: String(root.notes).trim(),
   };
+
+  if (normalized.days.some((day, index) => day.dayIndex !== index + 1)) return { valid: false, reason: "invalid_day_order" };
 
   return { valid: true, value: normalized };
 }
@@ -272,7 +276,8 @@ export async function generateAiProgram(input: AiProgramInput) {
       notes: "string",
     }),
     `Contrainte jours/semaine: ${input.daysPerWeek}`,
-    "Le programme doit contenir exactement 1 entree dans days: une seule seance complete.",
+    `Le programme doit contenir exactement ${input.daysPerWeek} entrees dans days, une seance complete par jour, avec dayIndex de 1 a ${input.daysPerWeek}.`,
+    "Limites : nom et titre 100 caracteres, 1 a 12 series, repos 15 a 600 secondes, au maximum 30 exercices par seance.",
     `Duree cible par seance (min): ${input.sessionDurationMin}`,
     `Objectif: ${input.goal}`,
     `Niveau: ${input.level}`,
@@ -303,6 +308,7 @@ export async function generateAiProgram(input: AiProgramInput) {
       console.error("[AI_PROGRAM] JSON invalide", valid.reason);
       return { ok: false as const, error: "invalid_json", reason: valid.reason };
     }
+    if (valid.value.days.length !== input.daysPerWeek) return { ok: false as const, error: "invalid_json", reason: "incorrect_day_count" };
 
     const exerciseBySlug = new Map(catalog.map((item) => [item.slug, item]));
     const known = new Set(catalog.map((item) => item.slug));
@@ -341,7 +347,10 @@ export async function generateAiProgram(input: AiProgramInput) {
   }
 }
 
-export async function saveGeneratedProgram(program: ValidGeneratedProgram, scope?: { userProfileId: string; db: Prisma.TransactionClient }) {
+export async function saveGeneratedProgram(program: ValidGeneratedProgram, scope?: { userProfileId: string; db: Prisma.TransactionClient; level?: "BEGINNER" | "INTERMEDIATE" | "ADVANCED" }) {
+  const checked = validateGeneratedProgram(program);
+  if (!checked.valid) return { ok: false as const, error: "invalid_program_payload" };
+  program = checked.value;
   const userProfileId = scope?.userProfileId ?? (await getOrCreateDemoProfile()).id;
   const db = scope?.db ?? prisma;
 
@@ -362,13 +371,13 @@ export async function saveGeneratedProgram(program: ValidGeneratedProgram, scope
       userProfileId,
       name: program.programName,
       goal: toProgramGoal(program.goal),
-      level: "INTERMEDIATE",
-      sessionsPerWeek: 1,
+      level: scope?.level ?? "INTERMEDIATE",
+      sessionsPerWeek: program.days.length,
       description: program.notes,
       status: "DRAFT",
       days: {
-        create: program.days.slice(0, 1).map((day) => ({
-          dayIndex: 1,
+        create: program.days.map((day, index) => ({
+          dayIndex: index + 1,
           title: day.title || program.programName,
           focus: day.notes,
           exercises: {
@@ -376,6 +385,7 @@ export async function saveGeneratedProgram(program: ValidGeneratedProgram, scope
               exerciseId: slugToId.get(ex.exerciseSlug)!,
               orderIndex: idx + 1,
               sets: ex.sets,
+              ...parseGeneratedReps(ex.reps),
               repsText: ex.reps,
               restSeconds: ex.restSeconds,
               tempo: ex.tempo ?? null,
@@ -389,4 +399,12 @@ export async function saveGeneratedProgram(program: ValidGeneratedProgram, scope
 
   console.info("[AI_PROGRAM] Sauvegarde succes", created.id);
   return { ok: true as const, programId: created.id, programName: created.name };
+}
+
+function parseGeneratedReps(reps: string) {
+  const match = reps.match(/^(\d{1,3})(?:\s*[-–]\s*(\d{1,3}))?$/);
+  if (!match) return {};
+  const repsMin = Number(match[1]);
+  const repsMax = Number(match[2] ?? match[1]);
+  return repsMin >= 1 && repsMax >= repsMin && repsMax <= 100 ? { repsMin, repsMax } : {};
 }

@@ -15,7 +15,8 @@ export async function POST(request: Request) {
       if (!generation?.generatedProgram) return { ok: false as const, error: "generation_not_found" };
       if (generation.savedProgramId) return { ok: true as const, programId: generation.savedProgramId, programName: "déjà enregistré" };
       // Use the server's successful generation, never a client-supplied replacement.
-      const saved = await saveGeneratedProgram(generation.generatedProgram as unknown as ValidGeneratedProgram, { userProfileId: profile.id, db: tx });
+      const level = generation.level === "BEGINNER" || generation.level === "ADVANCED" ? generation.level : "INTERMEDIATE";
+      const saved = await saveGeneratedProgram(generation.generatedProgram as unknown as ValidGeneratedProgram, { userProfileId: profile.id, db: tx, level });
       if (saved.ok) await tx.aiProgramGeneration.update({ where: { id: generation.id }, data: { savedProgramId: saved.programId } });
       return saved;
     });

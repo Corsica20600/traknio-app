@@ -1,0 +1,28 @@
+.builder { margin: 16px 0; min-width: 0; }
+.builder h2 { font-size: 1.3rem; }
+.builder button, .builder summary { min-height: 48px; cursor: pointer; }
+.builder button:not(:global(.primary-button)) { color: inherit; background: #17243a; border: 1px solid #34455e; border-radius: 12px; padding: 10px 16px; }
+.builder button:disabled { opacity: .45; cursor: not-allowed; }
+.builder button[aria-pressed="true"], .builder button[aria-current="step"] { border-color: #50cfff; background: #173d59; }
+.builder :focus-visible { outline: 2px solid #72e0ff; outline-offset: 3px; }
+.fieldset { border: 0; padding: 0; min-width: 0; margin: 0; }
+.row, .presets, .tabs, .steps { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 12px 0; }
+.row h2, .row h3 { flex: 1; }
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.builder .steps button { padding: 10px 5px; font-size: .85rem; }
+.choices, .settings, .list { display: grid; gap: 14px; }
+.choices button { text-align: left; }
+.choices small, .exerciseTitle small, .result small { display: block; color: #b4c2d8; margin-top: 5px; }
+.choices details { background: #101d30; padding: 14px; border-radius: 16px; }
+.choices details button { margin: 6px; }
+.exercise, .picker { padding: 14px; background: #0d192a; border: 1px solid #283b55; border-radius: 18px; min-width: 0; }
+.exerciseTitle { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; }
+.exerciseTitle span:nth-last-child(2) { flex: 1; }
+.exercise img, .result img { border-radius: 12px; object-fit: contain; background: #fff; flex-shrink: 0; }
+.results { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 8px; }
+.result { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid #34455e; border-radius: 12px; cursor: pointer; }
+.result:has(input:checked) { border-color: #56daae; background: #123731; }
+.result input { width: 22px; height: 22px; flex-shrink: 0; }
+.footer { display: flex; gap: 10px; background: #101c30f5; padding: 12px; border: 1px solid #34455e; border-radius: 16px; margin: 16px 0; flex-wrap: wrap; }
+.next { width: 100%; margin: 12px 0; }
+.builder select option { background: #101c30; color: white; }

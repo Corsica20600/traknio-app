@@ -21,9 +21,14 @@ export async function POST(request: Request) {
   const goal = String(body.goal ?? "").trim();
   const level = String(body.level ?? "").trim();
   const sessionDurationMin = Number(body.sessionDurationMin ?? 60);
+  const daysPerWeek = Number(body.daysPerWeek ?? 1);
+  if (!Number.isInteger(daysPerWeek) || daysPerWeek < 1 || daysPerWeek > 7) return NextResponse.json({ ok: false, error: "invalid_days" }, { status: 400 });
   const availableEquipment = Array.isArray(body.availableEquipment) ? body.availableEquipment.map(String) : [];
   const priorityMuscles = Array.isArray(body.priorityMuscles) ? body.priorityMuscles.map(String) : [];
   const restrictions = String(body.restrictions ?? "").trim();
+  if (restrictions.length > 1000 || availableEquipment.length > 20 || priorityMuscles.length > 20 || [...availableEquipment, ...priorityMuscles].some(value => value.length > 100)) {
+    return NextResponse.json({ ok: false, error: "input_too_long" }, { status: 400 });
+  }
 
   if (!["MUSCLE_GAIN", "FAT_LOSS", "STRENGTH", "RECOMPOSITION"].includes(goal)) {
     return NextResponse.json({ ok: false, error: "invalid_goal" }, { status: 400 });
@@ -51,7 +56,7 @@ export async function POST(request: Request) {
     const result = await generateAiProgram({
       goal: goal as "MUSCLE_GAIN" | "FAT_LOSS" | "STRENGTH" | "RECOMPOSITION",
       level: level as "BEGINNER" | "INTERMEDIATE" | "ADVANCED",
-      daysPerWeek: 1,
+      daysPerWeek,
       sessionDurationMin: Number.isFinite(sessionDurationMin) ? Math.max(25, Math.min(120, Math.floor(sessionDurationMin))) : 60,
       availableEquipment,
       priorityMuscles,

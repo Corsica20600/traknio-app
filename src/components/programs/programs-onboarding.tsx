@@ -17,7 +17,7 @@ export function ProgramsOnboarding({ onboarding, programs, exercises }: {
   return (
     <>
       <ContextualWalkthrough active={!state.programCreateSeen && programs === 0} step="programCreateSeen" target="[data-onboarding-target='program-create']" message="Crée ton premier programme ici." />
-      <ContextualWalkthrough active={!state.programExerciseSeen && programs > 0 && exercises === 0} step="programExerciseSeen" target="[data-onboarding-target='program-exercise']" message="Ajoute ici les exercices de cette journée." />
+      <ContextualWalkthrough active={!state.programExerciseSeen && programs > 0 && exercises === 0} step="programExerciseSeen" target="[data-onboarding-target='program-exercise']" message="Ouvre ton programme, puis choisis plusieurs exercices dans l’étape Mes séances." />
     </>
   );
 }

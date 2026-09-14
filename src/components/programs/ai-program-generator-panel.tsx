@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrandSelect } from "@/src/components/ui/brand-select";
 import { PrimaryButton } from "@/src/components/ui/primary-button";
@@ -26,7 +26,8 @@ type GeneratedProgram = {
   notes: string;
 };
 
-export function AiProgramGeneratorPanel() {
+export function AiProgramGeneratorPanel({ profile, onSaved }: { profile?: { goal: string; level: string; sessionsPerWeek: number }; onSaved?: (id: string) => void } = {}) {
+  const fieldId = useId();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -56,16 +57,10 @@ export function AiProgramGeneratorPanel() {
     const payload = {
       goal: String(formData.get("goal") ?? "MUSCLE_GAIN"),
       level: String(formData.get("level") ?? "INTERMEDIATE"),
-      daysPerWeek: 1,
+      daysPerWeek: Number(formData.get("daysPerWeek") ?? profile?.sessionsPerWeek ?? 3),
       sessionDurationMin: Number(formData.get("sessionDurationMin") ?? 60),
-      availableEquipment: String(formData.get("availableEquipment") ?? "")
-        .split(",")
-        .map((x) => x.trim())
-        .filter(Boolean),
-      priorityMuscles: String(formData.get("priorityMuscles") ?? "")
-        .split(",")
-        .map((x) => x.trim())
-        .filter(Boolean),
+      availableEquipment: formData.getAll("availableEquipment").map(String),
+      priorityMuscles: formData.getAll("priorityMuscles").map(String),
       restrictions: String(formData.get("restrictions") ?? "").trim(),
     };
 
@@ -120,6 +115,7 @@ export function AiProgramGeneratorPanel() {
         return;
       }
       setSavedText(`Programme sauvegarde: ${data.programName}`);
+      onSaved?.(data.programId);
       router.refresh();
     } catch {
       setError("Erreur reseau pendant la sauvegarde.");
@@ -133,9 +129,11 @@ export function AiProgramGeneratorPanel() {
       <p className="eyebrow">IA programme</p>
       <p className="muted">Essai de 7 jours : 1 génération réussie incluse. Abonnement : 4 générations par mois. Les modifications manuelles restent disponibles pendant ton accès.</p>
       <form action={onGenerate} className="form-grid">
+        <label htmlFor={`${fieldId}-goal`} className="field-label">Objectif</label>
         <BrandSelect
+          id={`${fieldId}-goal`}
           name="goal"
-          defaultValue="MUSCLE_GAIN"
+          defaultValue={profile?.goal === "STRENGTH" || profile?.goal === "FAT_LOSS" ? profile.goal : "MUSCLE_GAIN"}
           options={[
             { value: "MUSCLE_GAIN", label: "Prise de muscle" },
             { value: "FAT_LOSS", label: "Perte de gras" },
@@ -143,19 +141,22 @@ export function AiProgramGeneratorPanel() {
             { value: "RECOMPOSITION", label: "Recomposition" },
           ]}
         />
+        <label htmlFor={`${fieldId}-level`} className="field-label">Niveau</label>
         <BrandSelect
+          id={`${fieldId}-level`}
           name="level"
-          defaultValue="INTERMEDIATE"
+          defaultValue={profile?.level ?? "BEGINNER"}
           options={[
             { value: "BEGINNER", label: "Debutant" },
             { value: "INTERMEDIATE", label: "Intermediaire" },
             { value: "ADVANCED", label: "Avance" },
           ]}
         />
-        <input name="sessionDurationMin" type="number" min={25} max={120} defaultValue={60} className="input" placeholder="Duree seance (min)" />
-        <input name="availableEquipment" className="input" placeholder="Materiel (csv) ex: halteres, barre, machine" />
-        <input name="priorityMuscles" className="input" placeholder="Muscles prioritaires (csv)" />
-        <input name="restrictions" className="input" placeholder="Douleurs / restrictions" />
+        <label className="field-label">Séances par semaine<input name="daysPerWeek" type="number" min={1} max={7} defaultValue={Math.max(1, Math.min(7, profile?.sessionsPerWeek ?? 3))} className="input" /></label>
+        <label className="field-label">Durée d’une séance (minutes)<input name="sessionDurationMin" type="number" min={25} max={120} defaultValue={60} className="input" /></label>
+        <fieldset><legend>Matériel disponible</legend><div className="chips">{["Poids du corps", "Haltères", "Barre", "Machines", "Poulie", "Élastiques"].map(value => <label key={value} style={{ padding: 12 }}><input type="checkbox" name="availableEquipment" value={value} /> {value}</label>)}</div></fieldset>
+        <fieldset><legend>Muscles prioritaires (facultatif)</legend><div className="chips">{["Pectoraux", "Dos", "Épaules", "Bras", "Jambes", "Abdominaux"].map(value => <label key={value} style={{ padding: 12 }}><input type="checkbox" name="priorityMuscles" value={value} /> {value}</label>)}</div></fieldset>
+        <label className="field-label">Contraintes à prendre en compte (facultatif)<input name="restrictions" className="input" maxLength={1000} placeholder="Ex. éviter les sauts" /></label>
         <PrimaryButton type="submit" disabled={loading || restoring || saving}>{restoring ? "Récupération…" : loading ? "Génération…" : "Générer avec l’IA"}</PrimaryButton>
       </form>
 
@@ -180,7 +181,7 @@ export function AiProgramGeneratorPanel() {
             </section>
           ))}
           <PrimaryButton type="button" onClick={onSave} disabled={saving || loading}>
-            {saving ? "Sauvegarde..." : "Sauvegarder ce programme"}
+            {saving ? "Sauvegarde..." : onSaved ? "Enregistrer le brouillon et personnaliser" : "Sauvegarder ce programme"}
           </PrimaryButton>
         </div>
       )}
