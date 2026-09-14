@@ -11,6 +11,16 @@ export type ExerciseOverride = {
 const WIDE_GRIP_LAT_PULLDOWN_FR = "Tirage vertical à la machine";
 
 const overrides: Record<string, ExerciseOverride> = {
+  "lat-pulldown-machine": {
+    displayNameFr: WIDE_GRIP_LAT_PULLDOWN_FR,
+    primaryMuscleFr: "Dos",
+    cardImage: "/media/exercises/lat-pulldown-machine/position-start.webp",
+  },
+  "alternate-hammer-curl": {
+    displayNameFr: "Curl marteau alterné",
+    primaryMuscleFr: "Bras",
+    cardImage: "/media/exercises/alternate-hammer-curl/start.webp",
+  },
   "ab-roller": {
     displayNameFr: "Roulette abdominale",
     cueFr: "Saisis la roue à deux mains, garde le gainage et avance seulement sans creuser le bas du dos.",
