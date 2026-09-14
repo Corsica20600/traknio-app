@@ -7552,17 +7552,17 @@ summary:focus-visible {
 }
 
 /* The Lat Pulldown pilot keeps the standard app chrome and color system. */
-body:has(.latPulldownPilot) {
+body:has(.technicalSheetPilot) {
   background: #020611;
 }
 
-.app-shell:has(.latPulldownPilot) > .app-topbar {
+.app-shell:has(.technicalSheetPilot) > .app-topbar {
   display: flex;
   margin-inline: 16px;
   padding-top: 22px;
 }
 
-.trk-public.latPulldownPilot {
+.trk-public.technicalSheetPilot {
   background:
     radial-gradient(780px 520px at 76% 7%, rgba(29, 141, 255, .16), transparent 64%),
     radial-gradient(720px 500px at 8% 24%, rgba(133, 72, 255, .14), transparent 62%),

@@ -4,10 +4,10 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
 type DemoMedia = { src: string; alt: string };
-type AnimationMedia = { webm: string; webp: string; alt: string };
+type AnimationMedia = { webm: string; webp: string; alt: string; captions?: string };
 type DemoMode = "animation" | "start" | "end";
 
-export function ExerciseDemo({ start, end, animation }: { start: DemoMedia; end: DemoMedia; animation?: AnimationMedia }) {
+export function ExerciseDemo({ start, end, animation, idPrefix = "exercise" }: { start: DemoMedia; end: DemoMedia; animation?: AnimationMedia; idPrefix?: string }) {
   const [mode, setMode] = useState<DemoMode>(animation ? "animation" : "start");
   const [reducedMotion, setReducedMotion] = useState(false);
   const [inView, setInView] = useState(true);
@@ -45,7 +45,9 @@ export function ExerciseDemo({ start, end, animation }: { start: DemoMedia; end:
   const animationAvailable = Boolean(animation && !animationFailed);
   const activeMode = reducedMotion && mode === "animation" ? "start" : mode;
   const activeStatic = activeMode === "end" ? end : start;
-  const tabId = (next: DemoMode) => `lat-pulldown-demo-${next}`;
+  const panelId = `${idPrefix}-demo-panel`;
+  const descriptionId = `${idPrefix}-animation-description`;
+  const tabId = (next: DemoMode) => `${idPrefix}-demo-${next}`;
 
   return (
     <section className="exerciseDemo" aria-labelledby="exercise-demo-title">
@@ -54,11 +56,11 @@ export function ExerciseDemo({ start, end, animation }: { start: DemoMedia; end:
         <h2 id="exercise-demo-title">Le mouvement</h2>
       </div>
       <div className="demoTabs" role="tablist" aria-label="Position du mouvement">
-        {animationAvailable ? <button id={tabId("animation")} role="tab" type="button" aria-selected={mode === "animation"} aria-controls="lat-pulldown-demo-panel" onClick={() => setMode("animation")}>Animation</button> : null}
-        <button id={tabId("start")} role="tab" type="button" aria-selected={mode === "start"} aria-controls="lat-pulldown-demo-panel" onClick={() => setMode("start")}>Départ</button>
-        <button id={tabId("end")} role="tab" type="button" aria-selected={mode === "end"} aria-controls="lat-pulldown-demo-panel" onClick={() => setMode("end")}>Contraction</button>
+        {animationAvailable ? <button id={tabId("animation")} role="tab" type="button" aria-selected={mode === "animation"} aria-controls={panelId} onClick={() => setMode("animation")}>Animation</button> : null}
+        <button id={tabId("start")} role="tab" type="button" aria-selected={mode === "start"} aria-controls={panelId} onClick={() => setMode("start")}>Départ</button>
+        <button id={tabId("end")} role="tab" type="button" aria-selected={mode === "end"} aria-controls={panelId} onClick={() => setMode("end")}>Contraction</button>
       </div>
-      <div ref={containerRef} id="lat-pulldown-demo-panel" className="demoMedia" role="tabpanel" aria-labelledby={tabId(mode)}>
+      <div ref={containerRef} id={panelId} className="demoMedia" role="tabpanel" aria-labelledby={tabId(mode)}>
         {activeMode === "animation" && animation ? (
           <video
             ref={videoRef}
@@ -71,14 +73,16 @@ export function ExerciseDemo({ start, end, animation }: { start: DemoMedia; end:
             playsInline
             preload="metadata"
             aria-label={animation.alt}
-            aria-describedby="lat-pulldown-animation-description"
+            aria-describedby={descriptionId}
             onError={() => webmFailed ? setAnimationFailed(true) : setWebmFailed(true)}
-          ><track kind="captions" src="/media/exercises/lat-pulldown-machine/animation.fr.vtt" srcLang="fr" label="Description de l'animation" /></video>
+          >
+            {animation.captions ? <track kind="captions" src={animation.captions} srcLang="fr" label="Français" default /> : null}
+          </video>
         ) : (
           <Image src={activeStatic.src} alt={activeStatic.alt} width={1000} height={1250} priority className="demoImage" />
         )}
       </div>
-      <p id="lat-pulldown-animation-description" className="srOnly">Animation silencieuse : tirage vertical sur machine à leviers indépendants, des bras tendus à la contraction puis retour contrôlé.</p>
+      <p id={descriptionId} className="srOnly">{animation?.alt}</p>
       {reducedMotion && mode === "animation" ? <p className="motionNote">Animation désactivée selon les préférences de votre appareil.</p> : null}
     </section>
   );

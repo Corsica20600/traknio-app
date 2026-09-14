@@ -10,7 +10,7 @@ export type ExerciseGuidePilot = {
   why: string;
   mediaStart: { src: string; alt: string };
   mediaEnd: { src: string; alt: string };
-  mediaAnimation?: { webm: string; webp: string; alt: string };
+  mediaAnimation?: { webm: string; webp: string; alt: string; captions?: string };
   anatomyPrimaryMedia?: string;
   anatomySecondaryMedia?: string;
   anatomyStatus: "READY" | "REVIEW_REQUIRED";
@@ -53,6 +53,7 @@ export const LAT_PULLDOWN_MACHINE_PILOT: ExerciseGuidePilot = {
     webm: "/media/exercises/lat-pulldown-machine/animation.webm",
     webp: "/media/exercises/lat-pulldown-machine/animation.webp",
     alt: "Animation d'un tirage vertical sur machine à leviers indépendants.",
+    captions: "/media/exercises/lat-pulldown-machine/animation.fr.vtt",
   },
   anatomyPrimaryMedia: "/media/exercises/lat-pulldown-machine/anatomy-primary.webp",
   anatomySecondaryMedia: "/media/exercises/lat-pulldown-machine/anatomy-secondary.webp",
@@ -89,6 +90,62 @@ export const LAT_PULLDOWN_MACHINE_PILOT: ExerciseGuidePilot = {
   ],
 };
 
+export const ALTERNATE_HAMMER_CURL_PILOT: ExerciseGuidePilot = {
+  slug: "alternate-hammer-curl",
+  canonicalName: "Alternate Hammer Curl",
+  displayNameFr: "Curl marteau alterné",
+  watchDisplayName: "Curl marteau",
+  category: "Biceps",
+  equipment: "Haltères",
+  movementPattern: "Flexion du coude · prise neutre",
+  exerciseType: "Isolation",
+  why: "Le curl marteau alterné développe les bras en sollicitant particulièrement le brachial et le brachio-radial, tout en faisant intervenir le biceps brachial. La prise neutre propose un travail différent du curl classique et contribue à développer l'épaisseur du bras.",
+  mediaStart: {
+    src: "/media/exercises/alternate-hammer-curl/start.webp",
+    alt: "Curl marteau alterné : position de départ debout, bras le long du corps, haltères en prise neutre.",
+  },
+  mediaEnd: {
+    src: "/media/exercises/alternate-hammer-curl/contraction.webp",
+    alt: "Curl marteau alterné : bras droit en contraction, bras gauche bas, coude près du corps et prise neutre.",
+  },
+  mediaAnimation: {
+    webm: "/media/exercises/alternate-hammer-curl/animation.webm",
+    webp: "/media/exercises/alternate-hammer-curl/animation.webp",
+    alt: "Animation d'un curl marteau alterné : bras droit puis bras gauche, avec retour contrôlé.",
+  },
+  anatomyPrimaryMedia: "/media/exercises/alternate-hammer-curl/anatomy-primary.webp",
+  anatomySecondaryMedia: "/media/exercises/alternate-hammer-curl/anatomy-secondary.webp",
+  anatomyStatus: "REVIEW_REQUIRED",
+  primaryMuscles: ["Brachial", "Brachio-radial", "Biceps brachial"],
+  secondaryMuscles: ["Long extenseur radial du carpe", "Fléchisseur radial du carpe", "Fléchisseur superficiel des doigts", "Rond pronateur"],
+  steps: [
+    "Tenez-vous debout, un haltère dans chaque main, paumes tournées vers le corps.",
+    "Gardez les coudes près du torse et le tronc stable.",
+    "Fléchissez un coude en conservant la prise neutre, sans avancer l'épaule.",
+    "Contractez le bras en haut du mouvement sans décoller le coude du corps.",
+    "Redescendez lentement, puis répétez avec l'autre bras.",
+  ],
+  breathing: "Expirez pendant la montée. Inspirez pendant la descente contrôlée.",
+  tempo: {
+    value: "2 - 1 - 3",
+    detail: ["2 secondes de montée", "1 seconde de contraction", "3 secondes de descente contrôlée"],
+  },
+  tips: [
+    "Gardez les poignets en position neutre.",
+    "Maintenez les coudes près du corps.",
+    "Gardez les épaules stables.",
+    "Contrôlez toute la descente.",
+    "Utilisez une amplitude complète sans balancer le buste.",
+  ],
+  mistakes: [
+    "Balancer le buste pour monter l'haltère.",
+    "Avancer le coude pendant la flexion.",
+    "Tourner excessivement le poignet.",
+    "Monter l'épaule avec l'haltère.",
+    "Utiliser une charge empêchant un retour contrôlé.",
+  ],
+};
+
 export function getExerciseGuidePilot(slug: string) {
-  return slug === LAT_PULLDOWN_MACHINE_PILOT.slug ? LAT_PULLDOWN_MACHINE_PILOT : null;
+  return [LAT_PULLDOWN_MACHINE_PILOT, ALTERNATE_HAMMER_CURL_PILOT].find((guide) => guide.slug === slug) ?? null;
 }
