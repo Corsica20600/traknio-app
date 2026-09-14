@@ -1,0 +1,3 @@
+export function ExerciseHero({ canonicalName, displayNameFr, badges }: { canonicalName: string; displayNameFr: string; badges: readonly string[] }) {
+  return <header className="exerciseHero"><div className="exerciseBrand"><strong>TRAKNIO</strong><span>Plus qu&apos;un suivi. Une progression.</span></div><div className="exerciseHeroCopy"><p>Fiche technique</p><h1>{canonicalName}</h1><p className="exerciseSubtitle">{displayNameFr}</p><div className="exerciseBadges">{badges.map((badge, index) => <span className={index === 0 ? "isPrimary" : undefined} key={badge}>{badge}</span>)}</div></div><p className="exerciseMotto">Entraînez<br />Progressez<br />Vivez mieux</p></header>;
+}

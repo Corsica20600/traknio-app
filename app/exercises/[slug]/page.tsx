@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AddToProgramForm } from "@/src/components/exercise/add-to-program-form";
 import { ExerciseDetailSheet } from "@/src/components/exercise/exercise-detail-sheet";
+import { LatPulldownMachinePilot } from "@/src/components/exercise/lat-pulldown-machine-pilot";
 import { PrimaryButton } from "@/src/components/ui/primary-button";
 import { buildExerciseDetailContent } from "@/src/lib/exercise-detail-content";
 import { categoryToFr, levelToFr, translateSimple } from "@/src/lib/exercise-i18n";
@@ -47,6 +48,27 @@ function buildTips(input: {
 
 export default async function ExerciseDetailPage(props: PageProps<"/exercises/[slug]">) {
   const { slug } = await props.params;
+
+  // This is an isolated UI/data pilot. It intentionally does not overwrite the
+  // historic cable-pulldown records until the new exercise has been approved.
+  if (slug === "lat-pulldown-machine") {
+    const [pilotExercise, programs] = await Promise.all([
+      getExerciseBySlug(slug),
+      getProgramsForDemoUser(),
+    ]);
+    return (
+      <LatPulldownMachinePilot
+        exerciseId={pilotExercise?.id}
+        programs={programs.map((program) => ({
+          id: program.id,
+          name: program.name,
+          days: program.days.map((day) => ({ id: day.id, dayIndex: day.dayIndex, title: day.title })),
+        }))}
+        addToProgramAction={addExerciseToProgramDayAction}
+      />
+    );
+  }
+
   const [exercise, programs] = await Promise.all([
     getExerciseBySlug(slug),
     getProgramsForDemoUser(),
