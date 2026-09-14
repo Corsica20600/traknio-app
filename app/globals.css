@@ -7559,7 +7559,8 @@ body:has(.technicalSheetPilot) {
 .app-shell:has(.technicalSheetPilot) > .app-topbar {
   display: flex;
   margin-inline: 16px;
-  padding-top: 22px;
+  /* Keep the shared Traknio header comfortably below Android's status area. */
+  padding-top: 34px;
 }
 
 .trk-public.technicalSheetPilot {
