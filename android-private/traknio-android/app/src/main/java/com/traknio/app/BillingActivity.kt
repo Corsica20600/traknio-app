@@ -1,188 +1,83 @@
 package com.traknio.app
 
 import android.os.Bundle
+import android.util.Log
 import android.webkit.CookieManager
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.android.billingclient.api.AcknowledgePurchaseParams
-import com.android.billingclient.api.BillingClient
-import com.android.billingclient.api.BillingClientStateListener
-import com.android.billingclient.api.BillingFlowParams
-import com.android.billingclient.api.BillingResult
-import com.android.billingclient.api.PendingPurchasesParams
-import com.android.billingclient.api.ProductDetails
-import com.android.billingclient.api.Purchase
-import com.android.billingclient.api.QueryProductDetailsParams
-import com.android.billingclient.api.QueryPurchasesParams
+import com.android.billingclient.api.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** Native checkout: Play selects eligibility; the server alone grants entitlement. */
 class BillingActivity : AppCompatActivity() {
-    companion object {
-        const val EXTRA_BASE_PLAN_ID = "com.traknio.app.EXTRA_BASE_PLAN_ID"
-        private const val DEFAULT_BASE_PLAN_ID = "monthly"
-    }
-
+    companion object { const val EXTRA_BASE_PLAN_ID = "com.traknio.app.EXTRA_BASE_PLAN_ID"; private const val DEFAULT_BASE_PLAN_ID = "monthly"; private const val TAG = "TraknioBilling" }
     private val baseUrl = BuildConfig.TRAKNIO_SYNC_BASE_URL.trimEnd('/')
     private val productId = BuildConfig.GOOGLE_PLAY_SUBSCRIPTION_PRODUCT_ID
     private val packageNameForPlay = BuildConfig.GOOGLE_PLAY_PACKAGE_NAME
-    private val requestedBasePlanId: String
-        get() = intent.getStringExtra(EXTRA_BASE_PLAN_ID)
-            ?.trim()
-            ?.takeIf { it == "monthly" || it == "yearly" }
-            ?: DEFAULT_BASE_PLAN_ID
+    private val trialOfferId = BuildConfig.GOOGLE_PLAY_TRIAL_OFFER_ID
+    private val plan get() = intent.getStringExtra(EXTRA_BASE_PLAN_ID)?.trim()?.takeIf { it == "monthly" || it == "yearly" } ?: DEFAULT_BASE_PLAN_ID
     private lateinit var billingClient: BillingClient
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Toast.makeText(this, "Préparation de l'abonnement...", Toast.LENGTH_SHORT).show()
-
-        billingClient = BillingClient.newBuilder(this)
-            .setListener { billingResult, purchases ->
-                if (billingResult.responseCode == BillingClient.BillingResponseCode.OK && purchases != null) {
-                    purchases.forEach { purchase -> processPurchase(purchase) }
-                } else if (billingResult.responseCode != BillingClient.BillingResponseCode.USER_CANCELED) {
-                    showAndFinish("Erreur achat: ${billingResult.debugMessage}")
-                } else {
-                    finish()
-                }
-            }
-            .enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().build())
-            .enableAutoServiceReconnection()
-            .build()
-
+        billingClient = BillingClient.newBuilder(this).setListener(::onPurchasesUpdated)
+            .enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().build()).enableAutoServiceReconnection().build()
         billingClient.startConnection(object : BillingClientStateListener {
-            override fun onBillingSetupFinished(billingResult: BillingResult) {
-                if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                    queryExistingPurchases()
-                    queryProductAndLaunch()
-                } else {
-                    showAndFinish("Google Play indisponible: ${billingResult.debugMessage}")
-                }
-            }
-
+            override fun onBillingSetupFinished(result: BillingResult) { if (result.responseCode == BillingClient.BillingResponseCode.OK) { queryExistingPurchases(); queryProduct() } else unavailable() }
             override fun onBillingServiceDisconnected() = Unit
         })
     }
-
-    private fun queryExistingPurchases() {
-        val params = QueryPurchasesParams.newBuilder()
-            .setProductType(BillingClient.ProductType.SUBS)
-            .build()
-
-        billingClient.queryPurchasesAsync(params) { billingResult, purchases ->
-            if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                purchases.filter { it.products.contains(productId) }.forEach { processPurchase(it) }
-            }
+    private fun event(name: String) = Log.i(TAG, "event=$name basePlan=$plan")
+    private fun unavailable() { event("billing_products_failed"); showAndFinish("Google Play est indisponible. Réessaie dans un instant.") }
+    private fun onPurchasesUpdated(result: BillingResult, purchases: List<Purchase>?) = when (result.responseCode) {
+        BillingClient.BillingResponseCode.OK -> purchases.orEmpty().forEach(::processPurchase)
+        BillingClient.BillingResponseCode.USER_CANCELED -> { event("billing_purchase_cancelled"); finish() }
+        else -> { event("billing_purchase_failed"); showAndFinish("Le paiement n’a pas abouti. Réessaie plus tard.") }
+    }
+    private fun queryExistingPurchases() = billingClient.queryPurchasesAsync(QueryPurchasesParams.newBuilder().setProductType(BillingClient.ProductType.SUBS).build()) { r, purchases -> if (r.responseCode == BillingClient.BillingResponseCode.OK) purchases.filter { it.products.contains(productId) }.forEach(::processPurchase) }
+    private fun queryProduct() {
+        val product = QueryProductDetailsParams.Product.newBuilder().setProductId(productId).setProductType(BillingClient.ProductType.SUBS).build()
+        billingClient.queryProductDetailsAsync(QueryProductDetailsParams.newBuilder().setProductList(listOf(product)).build()) { r, result ->
+            val details = result.productDetailsList.firstOrNull()
+            if (r.responseCode != BillingClient.BillingResponseCode.OK || details == null) return@queryProductDetailsAsync unavailable()
+            event("billing_products_loaded"); presentOffer(details)
         }
     }
-
-    private fun queryProductAndLaunch() {
-        val product = QueryProductDetailsParams.Product.newBuilder()
-            .setProductId(productId)
-            .setProductType(BillingClient.ProductType.SUBS)
-            .build()
-
-        val params = QueryProductDetailsParams.newBuilder()
-            .setProductList(listOf(product))
-            .build()
-
-        billingClient.queryProductDetailsAsync(params) { billingResult, result ->
-            if (billingResult.responseCode != BillingClient.BillingResponseCode.OK) {
-                showAndFinish("Produit indisponible: ${billingResult.debugMessage}")
-                return@queryProductDetailsAsync
-            }
-
-            val productDetails = result.productDetailsList.firstOrNull()
-            if (productDetails == null) {
-                showAndFinish("Abonnement $productId introuvable dans Google Play")
-                return@queryProductDetailsAsync
-            }
-
-            launchBillingFlow(productDetails)
-        }
+    private fun presentOffer(details: ProductDetails) {
+        val planOffers = details.subscriptionOfferDetails.orEmpty().filter { it.basePlanId == plan }
+        val trial = if (plan == "monthly") planOffers.firstOrNull { it.offerId == trialOfferId } else null
+        val selected = trial ?: planOffers.firstOrNull { it.offerId == null }
+        if (selected == null) { event("billing_trial_offer_missing"); return showAndFinish("Cette formule n’est pas disponible dans Google Play.") }
+        if (trial != null) event("billing_trial_offer_loaded") else if (plan == "monthly") event("billing_trial_offer_missing")
+        val price = selected.pricingPhases.pricingPhaseList.lastOrNull()?.formattedPrice ?: "le prix affiché par Google Play"
+        val isTrial = trial != null && selected.pricingPhases.pricingPhaseList.any { it.priceAmountMicros == 0L }
+        val period = if (plan == "yearly") "an" else "mois"
+        val text = if (isTrial) "Découvre Traknio gratuitement pendant 7 jours. Puis $price / mois. Renouvellement automatique sauf résiliation depuis Google Play." else "$price / $period. Renouvellement automatique sauf résiliation depuis Google Play."
+        AlertDialog.Builder(this).setTitle(if (isTrial) "7 jours gratuits" else "Traknio").setMessage(text)
+            .setNegativeButton("Plus tard") { _, _ -> finish() }
+            .setPositiveButton(if (isTrial) "Commencer mes 7 jours gratuits" else "S’abonner") { _, _ -> launchFlow(details, selected) }.show()
     }
-
-    private fun launchBillingFlow(productDetails: ProductDetails) {
-        val offer = productDetails.subscriptionOfferDetails
-            ?.firstOrNull { it.basePlanId == requestedBasePlanId }
-            ?: productDetails.subscriptionOfferDetails?.firstOrNull()
-        val offerToken = offer?.offerToken
-        if (offerToken.isNullOrBlank()) {
-            showAndFinish("Offre Google Play indisponible pour $requestedBasePlanId")
-            return
-        }
-
-        val productParams = BillingFlowParams.ProductDetailsParams.newBuilder()
-            .setProductDetails(productDetails)
-            .setOfferToken(offerToken)
-            .build()
-
-        val flowParams = BillingFlowParams.newBuilder()
-            .setProductDetailsParamsList(listOf(productParams))
-            .build()
-
-        val result = billingClient.launchBillingFlow(this, flowParams)
-        if (result.responseCode != BillingClient.BillingResponseCode.OK) {
-            showAndFinish("Impossible d'ouvrir Google Play: ${result.debugMessage}")
-        }
+    private fun launchFlow(details: ProductDetails, offer: ProductDetails.SubscriptionOfferDetails) {
+        event("billing_purchase_started")
+        val params = BillingFlowParams.ProductDetailsParams.newBuilder().setProductDetails(details).setOfferToken(offer.offerToken).build()
+        if (billingClient.launchBillingFlow(this, BillingFlowParams.newBuilder().setProductDetailsParamsList(listOf(params)).build()).responseCode != BillingClient.BillingResponseCode.OK) { event("billing_purchase_failed"); showAndFinish("Impossible d’ouvrir Google Play.") }
     }
-
     private fun processPurchase(purchase: Purchase) {
         if (!purchase.products.contains(productId)) return
-
+        if (purchase.purchaseState == Purchase.PurchaseState.PENDING) { event("billing_purchase_pending"); Toast.makeText(this, "Paiement en attente de confirmation Google Play.", Toast.LENGTH_LONG).show(); return }
+        if (purchase.purchaseState != Purchase.PurchaseState.PURCHASED) return
         lifecycleScope.launch {
-            val cookieHeader = CookieManager.getInstance().getCookie(baseUrl)
-            val verifyResult = withContext(Dispatchers.IO) {
-                GooglePlayBillingApi.verifyPurchase(
-                    baseUrl = baseUrl,
-                    cookieHeader = cookieHeader,
-                    packageName = packageNameForPlay,
-                    productId = productId,
-                    purchaseToken = purchase.purchaseToken,
-                )
-            }
-
-            if (!verifyResult.ok) {
-                showAndFinish("Validation serveur impossible: ${verifyResult.message}")
-                return@launch
-            }
-
-            if (!purchase.isAcknowledged) {
-                acknowledgePurchase(purchase)
-            } else {
-                showAndFinish(if (verifyResult.active) "Premium activé" else "Abonnement synchronisé")
-            }
+            val verified = withContext(Dispatchers.IO) { GooglePlayBillingApi.verifyPurchase(baseUrl, CookieManager.getInstance().getCookie(baseUrl), packageNameForPlay, productId, purchase.purchaseToken) }
+            if (!verified.ok) { event("billing_entitlement_verification_failed"); return@launch showAndFinish("Achat reçu, validation serveur en attente. Réouvre Traknio dans un instant.") }
+            event("billing_entitlement_verified")
+            if (!purchase.isAcknowledged) acknowledge(purchase) else { event("billing_purchase_success"); showAndFinish(if (verified.active) "Premium activé" else "Abonnement synchronisé") }
         }
     }
-
-    private fun acknowledgePurchase(purchase: Purchase) {
-        val params = AcknowledgePurchaseParams.newBuilder()
-            .setPurchaseToken(purchase.purchaseToken)
-            .build()
-
-        billingClient.acknowledgePurchase(params) { billingResult ->
-            showAndFinish(
-                if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                    "Premium activé"
-                } else {
-                    "Abonnement validé, accusé Google en attente"
-                },
-            )
-        }
-    }
-
-    private fun showAndFinish(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-        finish()
-    }
-
-    override fun onDestroy() {
-        if (::billingClient.isInitialized) {
-            billingClient.endConnection()
-        }
-        super.onDestroy()
-    }
+    private fun acknowledge(purchase: Purchase) = billingClient.acknowledgePurchase(AcknowledgePurchaseParams.newBuilder().setPurchaseToken(purchase.purchaseToken).build()) { r -> if (r.responseCode == BillingClient.BillingResponseCode.OK) { event("billing_purchase_success"); showAndFinish("Premium activé") } else showAndFinish("Abonnement validé, confirmation Google en attente.") }
+    private fun showAndFinish(message: String) { Toast.makeText(this, message, Toast.LENGTH_LONG).show(); finish() }
+    override fun onDestroy() { if (::billingClient.isInitialized) billingClient.endConnection(); super.onDestroy() }
 }

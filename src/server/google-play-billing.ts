@@ -35,6 +35,7 @@ export type VerifiedGooglePlaySubscription = {
     | "FREE";
   productId: string | null;
   basePlanId: string | null;
+  offerId: string | null;
   orderId: string | null;
   currentPeriodEnd: Date | null;
   rawState: string | null;
@@ -114,7 +115,8 @@ async function getAndroidPublisherAccessToken() {
   return body.access_token;
 }
 
-function mapSubscriptionState(state: string | undefined): VerifiedGooglePlaySubscription["status"] {
+function mapSubscriptionState(state: string | undefined, offerId?: string): VerifiedGooglePlaySubscription["status"] {
+  if (state === "SUBSCRIPTION_STATE_ACTIVE" && offerId === "trial-7-days") return "TRIALING";
   if (state === "SUBSCRIPTION_STATE_ACTIVE") return "ACTIVE";
   if (state === "SUBSCRIPTION_STATE_IN_GRACE_PERIOD") return "PAST_DUE";
   if (state === "SUBSCRIPTION_STATE_ON_HOLD") return "UNPAID";
@@ -178,7 +180,8 @@ export async function verifyGooglePlaySubscription(input: {
 
   const purchase = (await response.json()) as GooglePlaySubscriptionPurchase;
   const lineItem = purchase.lineItems?.[0] ?? null;
-  const status = mapSubscriptionState(purchase.subscriptionState);
+  const offerId = lineItem?.offerDetails?.offerId;
+  const status = mapSubscriptionState(purchase.subscriptionState, offerId);
   const expiryTime = lineItem?.expiryTime ? new Date(lineItem.expiryTime) : null;
   const hasRemainingEntitlement = expiryTime ? expiryTime.getTime() > Date.now() : true;
   const active =
@@ -191,6 +194,7 @@ export async function verifyGooglePlaySubscription(input: {
     status,
     productId: lineItem?.productId ?? null,
     basePlanId: lineItem?.offerDetails?.basePlanId ?? null,
+    offerId: offerId ?? null,
     orderId: purchase.latestOrderId ?? null,
     currentPeriodEnd: expiryTime && !Number.isNaN(expiryTime.getTime()) ? expiryTime : null,
     rawState: purchase.subscriptionState ?? null,

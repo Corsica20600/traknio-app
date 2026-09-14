@@ -16,5 +16,7 @@ wear-os/
 .env.*
 .vercel/
 documents/
+.codex-remote-attachments/
+reports/
 .idea/
 .gradle/

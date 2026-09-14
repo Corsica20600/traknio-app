@@ -68,9 +68,12 @@ android {
             ?: "traknio_premium"
         val googlePlayPackageName = propertyValue("GOOGLE_PLAY_PACKAGE_NAME")
             ?: "com.traknio.app"
+        val googlePlayTrialOfferId = propertyValue("GOOGLE_PLAY_TRIAL_OFFER_ID")
+            ?: "trial-7-days"
         buildConfigField("String", "TRAKNIO_SYNC_BASE_URL", buildConfigString(syncBaseUrl))
         buildConfigField("String", "GOOGLE_PLAY_SUBSCRIPTION_PRODUCT_ID", buildConfigString(googlePlayProductId))
         buildConfigField("String", "GOOGLE_PLAY_PACKAGE_NAME", buildConfigString(googlePlayPackageName))
+        buildConfigField("String", "GOOGLE_PLAY_TRIAL_OFFER_ID", buildConfigString(googlePlayTrialOfferId))
     }
 
     buildTypes {

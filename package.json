@@ -22,6 +22,7 @@
     "translate:exercises-fr": "tsx scripts/translate-exercises-fr.ts",
     "standardize:exercises": "tsx scripts/standardize-exercises-table.ts",
     "report:missing-visuals": "tsx scripts/report-exercises-missing-visuals.ts",
+    "audit:exercise-catalog": "tsx scripts/audit-exercise-catalog.ts",
     "fix:media-free-db": "tsx scripts/fix-exercise-media-from-free-db.ts"
   },
   "dependencies": {
@@ -32,6 +33,7 @@
     "@prisma/client": "^6.19.0",
     "@vercel/blob": "^2.7.0",
     "@vercel/oidc": "^3.8.2",
+    "googleapis": "^178.0.0",
     "next": "16.2.5",
     "next-auth": "^5.0.0-beta.32",
     "prisma": "^6.19.0",

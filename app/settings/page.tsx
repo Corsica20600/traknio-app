@@ -10,6 +10,7 @@ import { KeepScreenSetting } from "@/src/components/workout/keep-screen-setting"
 import { isStripeConfigured } from "@/src/lib/stripe";
 import { privatePageMetadata } from "@/src/lib/private-page-metadata";
 import { deleteAccountAction } from "@/src/server/account-actions";
+import { BillingPurchaseOptions, WebOnly } from "./billing-purchase-options";
 import { createBillingCheckoutAction, openBillingPortalAction } from "@/src/server/billing-actions";
 import { getAccountSettingsData } from "@/src/server/fitness-queries";
 import { disconnectIntegrationAction, enableHealthConnectPreparationAction } from "@/src/server/integration-actions";
@@ -210,11 +211,13 @@ export default async function SettingsPage(props: SettingsPageProps) {
 
       <GlassCard className="settings-billing-card" elevated>
         {!premiumAccess && !accountData.profile.trialStartedAt && accountData.profile.subscriptionStatus === "FREE" ? (
-          <form action={activateAccountTrial}>
-            <h2>Découvre Traknio pendant 7 jours</h2>
-            <p>Un programme généré par IA inclus, modifiable manuellement. Essai commun au téléphone et à la montre, sans renouvellement automatique.</p>
-            <button type="submit" className="primary-button">Activer mes 7 jours gratuits</button>
-          </form>
+          <WebOnly>
+            <form action={activateAccountTrial}>
+              <h2>Essai web de 7 jours</h2>
+              <p>Un programme généré par IA inclus, modifiable manuellement. Essai commun au téléphone et à la montre, sans renouvellement automatique.</p>
+              <button type="submit" className="primary-button">Activer mon essai web</button>
+            </form>
+          </WebOnly>
         ) : null}
         {accountData.profile.trialEndsAt ? (
           <p>{hasActiveAccountTrial(accountData.profile) ? "Essai actif jusqu’au " : "Essai terminé le "}{formatDate(accountData.profile.trialEndsAt)} · 1 programme IA pendant l’essai.</p>
@@ -257,19 +260,20 @@ export default async function SettingsPage(props: SettingsPageProps) {
         ) : null}
         {access === "premium" && !premiumAccess ? (
           <p className="settings-danger-error">
-            Abonnement requis pour accéder à l&apos;application.
+            Choisis une offre pour continuer. Sur Android, les utilisateurs éligibles voient 7 jours gratuits avant le prix mensuel Google Play.
           </p>
         ) : null}
         {connected ? (
           <div className="settings-billing-actions">
             {!entitlementActive ? (
+              <BillingPurchaseOptions>
               <>
                 <div className="settings-stripe-plan-grid">
                   <a className="primary-button full-line" href="traknio://billing/google-play?plan=monthly">
-                    Google Play · 4,99 € / mois
+                    Google Play · offre mensuelle
                   </a>
                   <a className="ghost-btn full-line" href="traknio://billing/google-play?plan=yearly">
-                    Google Play · 39,99 € / an
+                    Google Play · offre annuelle
                   </a>
                 </div>
                 <div className="settings-stripe-plan-grid">
@@ -287,6 +291,7 @@ export default async function SettingsPage(props: SettingsPageProps) {
                   </form>
                 </div>
               </>
+              </BillingPurchaseOptions>
             ) : null}
             {canOpenPortal ? (
               <form action={openBillingPortalAction}>

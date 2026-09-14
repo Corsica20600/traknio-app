@@ -87,6 +87,7 @@ export async function POST(request: Request) {
       currentPeriodEnd: verified.currentPeriodEnd,
       productId,
       basePlanId: verified.basePlanId,
+      offerId: verified.offerId,
       rawState: verified.rawState,
     });
   } catch (error) {

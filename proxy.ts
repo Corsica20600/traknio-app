@@ -22,6 +22,16 @@ export default auth((request) => {
   const isConnected = Boolean(request.auth?.user?.email);
   const { pathname, search } = request.nextUrl;
 
+  // The exercise template pilot is intentionally reviewable on Vercel previews
+  // without a Google OAuth callback. It is never public on production.
+  const isPublicPreviewPilot =
+    process.env.VERCEL_ENV === "preview" &&
+    pathname === "/exercises/lat-pulldown-machine";
+
+  if (isPublicPreviewPilot) {
+    return NextResponse.next();
+  }
+
   if (isTokenProtectedApiRoute(pathname)) {
     return NextResponse.next();
   }
