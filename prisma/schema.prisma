@@ -61,6 +61,39 @@ enum MediaType {
   ANIMATION
 }
 
+enum ExerciseMediaRole {
+  THUMBNAIL
+  START
+  MID
+  MID_2
+  MID_3
+  CONTRACTION
+  ANIMATION
+  ANATOMY_PRIMARY
+  ANATOMY_SECONDARY
+}
+
+enum ExerciseTechnicalSheetStatus {
+  MISSING
+  GENERATING
+  REVIEW_REQUIRED
+  READY
+}
+
+enum ExerciseMediaStatus {
+  MISSING
+  GENERATING
+  REVIEW_REQUIRED
+  READY
+}
+
+enum HumanReviewStatus {
+  NOT_REQUIRED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum MediaFormat {
   LOTTIE
   WEBP
@@ -425,6 +458,10 @@ model Exercise {
   slug                  String               @unique
   name                  String
   nameFr                String?
+  /// A short editorial name for constrained surfaces such as Wear OS.
+  watchDisplayName      String?
+  movementPatternFr     String?
+  exerciseTypeFr        String?
   category              ExerciseCategory
   movementType          ExerciseMovementType
   primaryMuscles        String[]
@@ -439,6 +476,14 @@ model Exercise {
   instructionsFr        String?
   commonMistakes        String[]
   commonMistakesFr      String[]
+  /// Enriched technical-sheet content. Existing catalogue fields remain the
+  /// canonical source for generic instructions and classifications.
+  whyFr                 String?
+  executionStepsFr      String[]
+  breathingFr           String?
+  technicalTempo        Json?
+  tipsFr                String[]
+  technicalSheetStatus  ExerciseTechnicalSheetStatus @default(MISSING)
   variants              String[]
   alternatives          String[]
   tags                  String[]
@@ -466,6 +511,13 @@ model ExerciseMedia {
   id              String      @id @default(cuid())
   exerciseId      String
   type            MediaType
+  /// Semantic role is deliberately separate from file format: an ANIMATION
+  /// can therefore have both a WebM primary and a WebP fallback.
+  role            ExerciseMediaRole?
+  mediaStatus     ExerciseMediaStatus @default(MISSING)
+  humanReviewStatus HumanReviewStatus @default(NOT_REQUIRED)
+  characterProfile String?
+  brandingRequired Boolean            @default(false)
   format          MediaFormat
   storagePath     String
   publicUrl       String
@@ -485,6 +537,8 @@ model ExerciseMedia {
   exercise        Exercise    @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
 
   @@index([exerciseId, type])
+  @@index([exerciseId, role, mediaStatus])
+  @@unique([exerciseId, role, format])
   @@index([exerciseId, sortOrder])
 }
 

@@ -144,3 +144,8 @@ export function getExerciseDisplayName(exercise: { slug?: string | null; name: s
   if (exercise.nameFr?.trim()) return exercise.nameFr.trim();
   return displayNameByEnglishName[normalizeName(exercise.name)] ?? exercise.name;
 }
+
+/** Keeps Wear labels editorial and short without affecting the phone/web name. */
+export function getWatchExerciseDisplayName(exercise: { watchDisplayName?: string | null; nameFr?: string | null; name: string }) {
+  return exercise.watchDisplayName?.trim() || exercise.nameFr?.trim() || exercise.name;
+}

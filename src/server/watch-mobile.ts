@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/src/lib/prisma";
-import { getExerciseDisplayName, getExerciseOverride } from "@/src/lib/exercise-overrides";
+import { getExerciseDisplayName, getExerciseOverride, getWatchExerciseDisplayName } from "@/src/lib/exercise-overrides";
 import { getOrCreateDemoProfile } from "@/src/server/fitness-queries";
 import { getSessionExerciseReplacements, getSessionLiveTargets, parseSessionNotesMeta, serializeSessionNotesMeta } from "@/src/server/session-exercise-replacements";
 import { watchImagePath } from "./watch-image";
@@ -15,6 +15,7 @@ type WatchPayload = {
   sessionId: string;
   workoutTitle: string;
   exerciseName: string;
+  displayName?: string;
   exerciseIndex: number;
   totalExercises: number;
   setIndex: number;
@@ -38,6 +39,7 @@ type WatchExerciseSummary = {
   imageUrl?: string | null;
   index: number;
   name: string;
+  displayName?: string;
   totalSets: number;
   completedSets: number;
   activeSetIndex: number;
@@ -62,6 +64,7 @@ type OrderedExercise = {
   exerciseId: string;
   programExerciseId: string | null;
   exerciseName: string;
+  watchDisplayName?: string | null;
   totalSets: number;
   targetReps: number;
   restSeconds: number;
@@ -155,7 +158,7 @@ async function resolveSession(sessionId?: string, userProfileId?: string, db: Wa
       include: {
         watchSession: true,
         sets: {
-          include: { exercise: { select: { id: true, slug: true, name: true, nameFr: true, equipment: true, equipmentFr: true, fallbackThumbnailPath: true, fallbackImagePath: true } } },
+          include: { exercise: { select: { id: true, slug: true, name: true, nameFr: true, watchDisplayName: true, equipment: true, equipmentFr: true, fallbackThumbnailPath: true, fallbackImagePath: true } } },
           orderBy: [{ createdAt: "asc" }, { setIndex: "asc" }],
         },
       },
@@ -168,7 +171,7 @@ async function resolveSession(sessionId?: string, userProfileId?: string, db: Wa
     include: {
       watchSession: true,
       sets: {
-        include: { exercise: { select: { id: true, slug: true, name: true, nameFr: true, equipment: true, equipmentFr: true, fallbackThumbnailPath: true, fallbackImagePath: true } } },
+        include: { exercise: { select: { id: true, slug: true, name: true, nameFr: true, watchDisplayName: true, equipment: true, equipmentFr: true, fallbackThumbnailPath: true, fallbackImagePath: true } } },
         orderBy: [{ createdAt: "asc" }, { setIndex: "asc" }],
       },
     },
@@ -220,7 +223,7 @@ async function getOrderedExercisesForSession(session: {
         const replacements = getSessionExerciseReplacements(session.notes);
         const replacementIds = [...new Set(Object.values(replacements).map(item => item.exerciseId))];
         const replacementRows = replacementIds.length ? await db.exercise.findMany({ where: { id: { in: replacementIds }, isActive: true },
-          select: { id: true, slug: true, name: true, nameFr: true, equipment: true, equipmentFr: true, fallbackThumbnailPath: true, fallbackImagePath: true } }) : [];
+          select: { id: true, slug: true, name: true, nameFr: true, watchDisplayName: true, equipment: true, equipmentFr: true, fallbackThumbnailPath: true, fallbackImagePath: true } }) : [];
         const replacementExercises = new Map(replacementRows.map(item => [item.id, item]));
         const exerciseIds = dayForToday.exercises.map((item) => replacements[item.id]?.exerciseId ?? item.exerciseId);
         const latestWeightByExercise = await getLatestWeightByExercise(session.userProfileId, exerciseIds, db);
@@ -231,6 +234,7 @@ async function getOrderedExercisesForSession(session: {
             exerciseId: effectiveExerciseId,
             programExerciseId: item.id,
             exerciseName: getExerciseDisplayName(effectiveExercise),
+            watchDisplayName: getWatchExerciseDisplayName(effectiveExercise),
             imageUrl: watchImagePath(getExerciseOverride(effectiveExercise.slug)?.cardImage, effectiveExercise.fallbackThumbnailPath, effectiveExercise.fallbackImagePath),
             totalSets: Math.max(1, item.sets ?? 3),
             targetReps: item.repsMin ?? item.repsMax ?? DEFAULT_REPS[0],
@@ -256,6 +260,7 @@ async function getOrderedExercisesForSession(session: {
         exerciseId: set.exerciseId,
         programExerciseId: null,
         exerciseName: getExerciseDisplayName(set.exercise),
+        watchDisplayName: getWatchExerciseDisplayName(set.exercise),
         imageUrl: watchImagePath(getExerciseOverride(set.exercise.slug)?.cardImage, set.exercise.fallbackThumbnailPath, set.exercise.fallbackImagePath),
         totalSets: 3,
         targetReps: DEFAULT_REPS[0],
@@ -270,7 +275,7 @@ async function getOrderedExercisesForSession(session: {
 
   const fallback = await db.exercise.findMany({
     where: { isActive: true },
-    select: { id: true, slug: true, name: true, nameFr: true, equipment: true, equipmentFr: true, fallbackThumbnailPath: true, fallbackImagePath: true },
+    select: { id: true, slug: true, name: true, nameFr: true, watchDisplayName: true, equipment: true, equipmentFr: true, fallbackThumbnailPath: true, fallbackImagePath: true },
     orderBy: [{ category: "asc" }, { name: "asc" }],
     take: 6,
   });
@@ -279,6 +284,7 @@ async function getOrderedExercisesForSession(session: {
     exerciseId: item.id,
     programExerciseId: null,
     exerciseName: getExerciseDisplayName(item),
+    watchDisplayName: getWatchExerciseDisplayName(item),
     imageUrl: watchImagePath(getExerciseOverride(item.slug)?.cardImage, item.fallbackThumbnailPath, item.fallbackImagePath),
     totalSets: 3,
     targetReps: DEFAULT_REPS[0],
@@ -339,6 +345,7 @@ async function buildWatchBootstrapPayload(
     return {
       index,
       name: item.exerciseName,
+      displayName: item.watchDisplayName ?? item.exerciseName,
       imageUrl: item.imageUrl ?? null,
       totalSets: item.totalSets,
       completedSets: Math.min(item.totalSets, completedSets),
@@ -352,6 +359,7 @@ async function buildWatchBootstrapPayload(
     sessionId: session.id,
     workoutTitle: session.title,
     exerciseName: currentExercise.exerciseName,
+    displayName: currentExercise.watchDisplayName ?? currentExercise.exerciseName,
     exerciseIndex: exerciseIndex + 1,
     totalExercises,
     setIndex: Math.min(setIndex, totalSets),
