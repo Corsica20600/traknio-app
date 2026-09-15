@@ -62,6 +62,27 @@ const overrides: Record<string, ExerciseOverride> = {
   "incline-dumbbell-press": {
     displayNameFr: "Développé incliné avec haltères",
     primaryMuscleFr: "Pectoraux",
+    cardImage: "/media/exercises/incline-dumbbell-press/thumbnail.webp",
+  },
+  "dumbbell-bench-press": {
+    displayNameFr: "Développé couché avec haltères",
+    primaryMuscleFr: "Pectoraux",
+    cardImage: "/media/exercises/dumbbell-bench-press/thumbnail.webp",
+  },
+  "cable-chest-press": {
+    displayNameFr: "Développé debout à la poulie",
+    primaryMuscleFr: "Pectoraux",
+    cardImage: "/media/exercises/cable-chest-press/thumbnail.webp",
+  },
+  "bent-over-barbell-row": {
+    displayNameFr: "Rowing buste penché avec barre",
+    primaryMuscleFr: "Dos",
+    cardImage: "/media/exercises/bent-over-barbell-row/thumbnail.webp",
+  },
+  "seated-cable-rows": {
+    displayNameFr: "Tirage horizontal assis à la poulie",
+    primaryMuscleFr: "Dos",
+    cardImage: "/media/exercises/seated-cable-rows/thumbnail.webp",
   },
   "dumbbell-fly": {
     displayNameFr: "Écarté couché avec haltères",
