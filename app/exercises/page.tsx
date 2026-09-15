@@ -51,7 +51,7 @@ function Pagination({
   const nextPage = Math.min(totalPages, page + 1);
 
   return (
-    <nav className="card workout-footer" aria-label="Pagination des exercices">
+    <nav className="card workout-footer exercise-pagination" aria-label="Pagination des exercices">
       {page <= 1 ? (
         <span className="ghost-btn disabled" aria-disabled="true">Page précédente</span>
       ) : (

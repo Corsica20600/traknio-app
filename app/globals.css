@@ -953,6 +953,23 @@ h4,
   gap: 8px;
   align-items: center;
 }
+.exercise-pagination {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  margin-bottom: 88px;
+}
+.exercise-pagination > :is(.ghost-btn, .primary-button) {
+  min-width: 0;
+  min-height: 54px;
+  text-align: center;
+}
+.exercise-pagination > .muted {
+  min-width: max-content;
+  text-align: center;
+  white-space: nowrap;
+}
+@media (min-width: 641px) {
+  .exercise-pagination { margin-bottom: 0; }
+}
 
 .bottom-nav {
   position: fixed;
