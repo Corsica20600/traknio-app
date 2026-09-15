@@ -7,6 +7,7 @@ import { PageHeader } from "@/src/components/ui/page-header";
 import { PrimaryButton } from "@/src/components/ui/primary-button";
 import { SectionTitle } from "@/src/components/ui/section-title";
 import { privatePageMetadata } from "@/src/lib/private-page-metadata";
+import { resolveExerciseMedia } from "@/src/lib/exercise-media-resolver";
 import { getWorkoutHistorySummaryForDemoUser } from "@/src/server/fitness-queries";
 
 export const metadata = privatePageMetadata(
@@ -102,7 +103,8 @@ export default async function HistoryPage() {
                 <SectionTitle eyebrow="Journal" title={formatGroupDate(groupDate)} />
                 <div className="history-session-list">
                   {items.map((session) => {
-                    const cover = session.sets[0]?.exercise?.fallbackThumbnailPath || session.sets[0]?.exercise?.fallbackImagePath || null;
+                    const coverExercise = session.sets[0]?.exercise;
+                    const cover = coverExercise ? resolveExerciseMedia(coverExercise, "HISTORY").image : null;
                     const isBest = stats.bestRecentSession?.id === session.id;
                     return (
                       <SessionCard

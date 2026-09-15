@@ -280,6 +280,12 @@ const LOT_A_GUIDES: readonly ExerciseGuidePilot[] = [
 ];
 
 export function getExerciseGuidePilot(slug: string) {
+  return getValidatedExerciseGuidePilots().find((guide) => guide.slug === slug) ?? null;
+}
+
+/** Transitional export for the idempotent Neon migration; runtime still falls
+ * back to individual pilots until database parity has been verified. */
+export function getValidatedExerciseGuidePilots(): readonly ExerciseGuidePilot[] {
   return [
     LAT_PULLDOWN_MACHINE_PILOT,
     ALTERNATE_HAMMER_CURL_PILOT,
@@ -288,5 +294,5 @@ export function getExerciseGuidePilot(slug: string) {
     BARBELL_SQUAT_PILOT,
     AB_ROLLER_PILOT,
     ...LOT_A_GUIDES,
-  ].find((guide) => guide.slug === slug) ?? null;
+  ];
 }

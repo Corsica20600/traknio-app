@@ -56,6 +56,7 @@ export function CurrentExerciseCard({
         fallbackImage={exercise.fallbackThumbnailPath || exercise.fallbackImagePath}
         title={title}
         compact
+        context="PHONE_WORKOUT"
       />
       <div className="current-exercise-card__body">
         <div>

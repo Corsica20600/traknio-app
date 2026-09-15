@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ExerciseVisual } from "@/src/components/exercise/exercise-visual";
-import { getExerciseDisplayName, getExerciseOverride } from "@/src/lib/exercise-overrides";
+import { getExerciseDisplayName } from "@/src/lib/exercise-overrides";
 import { levelToFr } from "@/src/lib/exercise-i18n";
 
 type ExerciseCardProps = {
@@ -27,7 +27,6 @@ type ExerciseCardProps = {
 };
 
 export function ExerciseCard({ exercise }: ExerciseCardProps) {
-  const override = getExerciseOverride(exercise.slug);
   const title = getExerciseDisplayName(exercise);
   const primaryMuscle = exercise.primaryMusclesFr[0] || exercise.primaryMuscles[0] || "Full body";
   const equipment = exercise.equipmentFr[0] || exercise.equipment[0] || "Poids du corps";
@@ -40,11 +39,9 @@ export function ExerciseCard({ exercise }: ExerciseCardProps) {
     >
       <ExerciseVisual
         media={exercise.media}
-        fallbackImage={override?.cardImage || exercise.fallbackThumbnailPath || exercise.fallbackImagePath}
+        fallbackImage={exercise.fallbackThumbnailPath || exercise.fallbackImagePath}
         fallbackAnimation={exercise.fallbackAnimationPath}
-        frameAnimationUrls={override?.frameAnimationUrls}
-        frameIntervalMs={override?.frameIntervalMs ?? 700}
-        preferFallbackImage={Boolean(override?.cardImage)}
+        context="CATALOG"
         title={title}
         compact
       />

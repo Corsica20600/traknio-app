@@ -90,6 +90,7 @@ export function ExercisesBrowser({ exercises }: { exercises: ExerciseCard[] }) {
               fallbackAnimation={exercise.fallbackAnimationPath}
               title={exercise.name}
               compact
+              context="CATALOG"
             />
             <div className="exercise-card-body">
               <h3>{exercise.name}</h3>

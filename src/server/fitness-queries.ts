@@ -6,6 +6,26 @@ import { getExerciseDisplayName } from "@/src/lib/exercise-overrides";
 import { hasPremiumAccess } from "@/src/lib/premium-access-rules";
 import { getSessionExerciseReplacements, resolveReplacementExercises } from "@/src/server/session-exercise-replacements";
 
+// Media resolution is pure. These relation includes only fetch the roles each
+// surface can display, keeping list payloads compact and query counts constant.
+const thumbnailMediaInclude = {
+  where: {
+    role: "THUMBNAIL",
+    mediaStatus: { in: ["READY", "REVIEW_REQUIRED"] },
+    humanReviewStatus: { not: "REJECTED" },
+  },
+  orderBy: { sortOrder: "asc" },
+} satisfies Prisma.Exercise$mediaArgs;
+
+const workoutMediaInclude = {
+  where: {
+    role: { in: ["THUMBNAIL", "START", "CONTRACTION"] },
+    mediaStatus: { in: ["READY", "REVIEW_REQUIRED"] },
+    humanReviewStatus: { not: "REJECTED" },
+  },
+  orderBy: { sortOrder: "asc" },
+} satisfies Prisma.Exercise$mediaArgs;
+
 function normalizeEmail(email?: string | null) {
   const normalized = email?.trim().toLowerCase();
   return normalized && normalized.includes("@") ? normalized : null;
@@ -45,6 +65,11 @@ type ExerciseWithFrCompat = {
   media: Array<{
     id: string;
     type: "IMAGE" | "THUMBNAIL" | "ANIMATION";
+    role: string | null;
+    mediaStatus: string;
+    humanReviewStatus: string;
+    characterProfile: string | null;
+    brandingRequired: boolean;
     format: string;
     publicUrl: string;
     url: string | null;
@@ -621,7 +646,7 @@ export async function getAccountExportData() {
 export async function getExercisesCatalog() {
   return prisma.exercise.findMany({
     where: { isActive: true },
-    include: { media: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }] } },
+    include: { media: thumbnailMediaInclude },
     orderBy: [{ category: "asc" }, { name: "asc" }],
   });
 }
@@ -726,7 +751,7 @@ export async function getExercisesCatalogPage(input: {
       prisma.exercise.count({ where }),
       prisma.exercise.findMany({
         where,
-        include: { media: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }] } },
+        include: { media: thumbnailMediaInclude },
         orderBy: [{ name: "asc" }],
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -761,7 +786,7 @@ export async function getExercisesCatalogPage(input: {
       prisma.exercise.count({ where: fallbackWhere }),
       prisma.exercise.findMany({
         where: fallbackWhere,
-        include: { media: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }] } },
+        include: { media: thumbnailMediaInclude },
         orderBy: [{ name: "asc" }],
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -805,7 +830,7 @@ export async function getProgramsForDemoUser() {
       days: {
         include: {
           exercises: {
-            include: { exercise: { include: { media: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }] } } } },
+            include: { exercise: { include: { media: thumbnailMediaInclude } } },
             orderBy: { orderIndex: "asc" },
           },
         },
@@ -824,7 +849,6 @@ export async function getExerciseOptionsForPrograms(limit = 300) {
       slug: true,
       name: true,
       nameFr: true,
-      primaryAnimationPath: true,
       primaryMuscles: true,
       primaryMusclesFr: true,
       fallbackThumbnailPath: true,
@@ -853,6 +877,9 @@ export async function getWorkoutHistoryForDemoUser() {
               primaryMusclesFr: true,
               fallbackThumbnailPath: true,
               fallbackImagePath: true,
+              fallbackAnimationPath: true,
+              primaryAnimationPath: true,
+              media: thumbnailMediaInclude,
             },
           },
         },
@@ -1061,7 +1088,7 @@ export async function getWorkoutPageData() {
           include: {
             exercises: {
               orderBy: { orderIndex: "asc" },
-              include: { exercise: { include: { media: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }] } } } },
+              include: { exercise: { include: { media: workoutMediaInclude } } },
             },
           },
         })
@@ -1071,7 +1098,7 @@ export async function getWorkoutPageData() {
           include: {
             exercises: {
               orderBy: { orderIndex: "asc" },
-              include: { exercise: { include: { media: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }] } } } },
+              include: { exercise: { include: { media: workoutMediaInclude } } },
             },
           },
         });
@@ -1108,7 +1135,7 @@ export async function getWorkoutPageData() {
     try {
       exercises = await prisma.exercise.findMany({
         where: { isActive: true },
-        include: { media: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }] } },
+        include: { media: workoutMediaInclude },
         orderBy: [{ category: "asc" }, { name: "asc" }],
         take: 120,
       }) as ExerciseWithFrCompat[];
@@ -1116,7 +1143,7 @@ export async function getWorkoutPageData() {
       if (!isMissingColumnError(error)) throw error;
       const fallbackExercises = await prisma.exercise.findMany({
         where: { isActive: true },
-        include: { media: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }] } },
+        include: { media: workoutMediaInclude },
         orderBy: [{ category: "asc" }, { name: "asc" }],
         take: 120,
       });
@@ -1157,7 +1184,7 @@ export async function getDashboardDataForDemoUser() {
               orderBy: { orderIndex: "asc" },
               include: {
                 exercise: {
-                  include: { media: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }] } },
+                  include: { media: thumbnailMediaInclude },
                 },
               },
             },
@@ -1264,7 +1291,7 @@ export async function getDashboardDataForDemoUser() {
             orderBy: { orderIndex: "asc" },
             include: {
               exercise: {
-                include: { media: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }] } },
+                include: { media: thumbnailMediaInclude },
               },
             },
           },

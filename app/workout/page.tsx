@@ -10,6 +10,7 @@ import { SpotifyOpenLink } from "@/src/components/integrations/spotify-open-link
 import { SpotifyNowPlaying } from "@/src/components/integrations/spotify-now-playing";
 import { GuidedWorkoutClient } from "@/src/components/workout/guided-workout-client";
 import { getExerciseDisplayName, getExerciseOverride } from "@/src/lib/exercise-overrides";
+import { resolveExerciseMedia } from "@/src/lib/exercise-media-resolver";
 import { privatePageMetadata } from "@/src/lib/private-page-metadata";
 
 export const metadata = privatePageMetadata(
@@ -43,7 +44,7 @@ export default async function WorkoutPage() {
   const heroTitle = currentSession
     ? (formatWorkoutLabel(currentSession.title) || "Séance du jour")
     : "Séance guidée";
-  const heroImage = heroExercise?.fallbackImagePath || heroExercise?.fallbackThumbnailPath || "/media/exercises/air-bike/0.jpg";
+  const heroImage = heroExercise ? (resolveExerciseMedia(heroExercise, "PHONE_WORKOUT").image || "/media/exercises/air-bike/0.jpg") : "/media/exercises/air-bike/0.jpg";
 
   return (
     <AppShell className="stack workout-screen premium-workout">
@@ -132,6 +133,11 @@ export default async function WorkoutPage() {
                   publicUrl: media.publicUrl,
                   url: media.url,
                   format: media.format,
+                  role: media.role,
+                  mediaStatus: media.mediaStatus,
+                  humanReviewStatus: media.humanReviewStatus,
+                  isPrimary: media.isPrimary,
+                  sortOrder: media.sortOrder,
                 })),
               };
             })}

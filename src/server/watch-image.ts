@@ -1,3 +1,5 @@
+import { resolveExerciseMedia, type ResolvableExercise } from "@/src/lib/exercise-media-resolver";
+
 /** Only raster assets supported by the watch; no data URLs or inline media. */
 export function watchImagePath(...candidates: Array<string | null | undefined>): string | null {
   for (const candidate of candidates) {
@@ -10,4 +12,9 @@ export function watchImagePath(...candidates: Array<string | null | undefined>):
     } catch { /* Ignore malformed or unsupported media. */ }
   }
   return null;
+}
+
+/** Wear shares the exact technical-media precedence used by the web surfaces. */
+export function watchExerciseImage(exercise: ResolvableExercise): string | null {
+  return watchImagePath(resolveExerciseMedia(exercise, "WATCH").image);
 }

@@ -1,9 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/src/lib/prisma";
-import { getExerciseDisplayName, getExerciseOverride, getWatchExerciseDisplayName } from "@/src/lib/exercise-overrides";
+import { getExerciseDisplayName, getWatchExerciseDisplayName } from "@/src/lib/exercise-overrides";
 import { getOrCreateDemoProfile } from "@/src/server/fitness-queries";
 import { getSessionExerciseReplacements, getSessionLiveTargets, parseSessionNotesMeta, serializeSessionNotesMeta } from "@/src/server/session-exercise-replacements";
-import { watchImagePath } from "./watch-image";
+import { watchExerciseImage } from "./watch-image";
 import { clampRestSeconds, getSharedRestRemaining } from "@/src/server/shared-rest-timer";
 import { currentSyncMetricContext, logSyncMetric } from "@/src/server/sync-metrics";
 import type { SessionLiveTarget } from "./session-exercise-replacements";
@@ -235,7 +235,7 @@ async function getOrderedExercisesForSession(session: {
             programExerciseId: item.id,
             exerciseName: getExerciseDisplayName(effectiveExercise),
             watchDisplayName: getWatchExerciseDisplayName(effectiveExercise),
-            imageUrl: watchImagePath(getExerciseOverride(effectiveExercise.slug)?.cardImage, effectiveExercise.fallbackThumbnailPath, effectiveExercise.fallbackImagePath),
+            imageUrl: watchExerciseImage(effectiveExercise),
             totalSets: Math.max(1, item.sets ?? 3),
             targetReps: item.repsMin ?? item.repsMax ?? DEFAULT_REPS[0],
             restSeconds: item.restSeconds ?? 90,
@@ -261,7 +261,7 @@ async function getOrderedExercisesForSession(session: {
         programExerciseId: null,
         exerciseName: getExerciseDisplayName(set.exercise),
         watchDisplayName: getWatchExerciseDisplayName(set.exercise),
-        imageUrl: watchImagePath(getExerciseOverride(set.exercise.slug)?.cardImage, set.exercise.fallbackThumbnailPath, set.exercise.fallbackImagePath),
+        imageUrl: watchExerciseImage(set.exercise),
         totalSets: 3,
         targetReps: DEFAULT_REPS[0],
         restSeconds: 90,
@@ -285,7 +285,7 @@ async function getOrderedExercisesForSession(session: {
     programExerciseId: null,
     exerciseName: getExerciseDisplayName(item),
     watchDisplayName: getWatchExerciseDisplayName(item),
-    imageUrl: watchImagePath(getExerciseOverride(item.slug)?.cardImage, item.fallbackThumbnailPath, item.fallbackImagePath),
+    imageUrl: watchExerciseImage(item),
     totalSets: 3,
     targetReps: DEFAULT_REPS[0],
     restSeconds: 90,

@@ -97,6 +97,7 @@ export function ExerciseDetailSheet({
             fallbackImage={visual.fallbackImage}
             frameAnimationUrls={visual.frameAnimationUrls}
             frameIntervalMs={visual.frameIntervalMs ?? 700}
+            context="TECHNICAL_SHEET"
             title={title}
           />
         </div>

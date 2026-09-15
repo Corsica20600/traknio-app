@@ -40,6 +40,11 @@ type WorkoutExercise = {
     publicUrl: string;
     url: string | null;
     format: string;
+    role?: string | null;
+    mediaStatus?: string | null;
+    humanReviewStatus?: string | null;
+    isPrimary?: boolean;
+    sortOrder?: number;
   }>;
 };
 

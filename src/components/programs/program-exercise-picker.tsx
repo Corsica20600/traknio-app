@@ -16,7 +16,6 @@ type ExerciseOption = {
   slug: string;
   name: string;
   nameFr: string | null;
-  primaryAnimationPath: string | null;
   primaryMuscles: string[];
   primaryMusclesFr: string[];
   fallbackThumbnailPath: string;
@@ -127,9 +126,6 @@ export function ProgramExercisePicker({
             <article key={exercise.id} className="program-picker-card">
               <ExerciseVisual
                 media={[
-                  ...(exercise.primaryAnimationPath
-                    ? [{ type: "ANIMATION" as const, publicUrl: exercise.primaryAnimationPath, url: exercise.primaryAnimationPath, format: "gif" }]
-                    : []),
                   ...(exercise.fallbackThumbnailPath
                     ? [{ type: "THUMBNAIL" as const, publicUrl: exercise.fallbackThumbnailPath, url: exercise.fallbackThumbnailPath, format: "webp" }]
                     : []),
@@ -138,9 +134,9 @@ export function ProgramExercisePicker({
                     : []),
                 ]}
                 fallbackImage={image}
-                fallbackAnimation={exercise.primaryAnimationPath}
                 title={title}
                 compact
+                context="PROGRAM"
                 className="program-picker-visual"
               />
               <div className="program-picker-body">

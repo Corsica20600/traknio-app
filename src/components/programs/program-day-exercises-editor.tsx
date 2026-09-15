@@ -142,6 +142,7 @@ function SortableExerciseCard({
         fallbackAnimation={ex.exercise.primaryAnimationPath}
         title={ex.exercise.nameFr || ex.exercise.name}
         compact
+        context="PROGRAM"
         className="program-day-item-visual"
       />
       <div>

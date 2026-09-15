@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { getExerciseDisplayName, getExerciseOverride } from "@/src/lib/exercise-overrides";
+import { resolveExerciseMedia, type ResolvableExerciseMedia } from "@/src/lib/exercise-media-resolver";
 
 type NextExerciseCardProps = {
   exercise?: {
@@ -12,6 +13,7 @@ type NextExerciseCardProps = {
     primaryMusclesFr: string[];
     fallbackThumbnailPath: string;
     fallbackImagePath: string;
+    media?: ResolvableExerciseMedia[];
     plannedSets: number | null;
     plannedWeightKg: number | null;
   } | null;
@@ -31,7 +33,7 @@ export function NextExerciseCard({ exercise }: NextExerciseCardProps) {
   const override = exercise.slug ? getExerciseOverride(exercise.slug) : null;
   const title = getExerciseDisplayName(exercise);
   const muscle = override?.primaryMuscleFr || exercise.primaryMusclesFr[0] || "Corps complet";
-  const image = exercise.fallbackThumbnailPath || exercise.fallbackImagePath;
+  const image = resolveExerciseMedia(exercise, "PHONE_WORKOUT").image;
 
   return (
     <section className="next-exercise-card">

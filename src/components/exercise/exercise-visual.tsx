@@ -1,22 +1,14 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import { resolveExerciseMedia, type ExerciseMediaContext, type ResolvableExerciseMedia } from "@/src/lib/exercise-media-resolver";
 
-type MediaLike = {
-  type: "IMAGE" | "THUMBNAIL" | "ANIMATION";
-  publicUrl?: string | null;
-  url?: string | null;
-  format?: string | null;
-};
+type MediaLike = ResolvableExerciseMedia;
 
 function extOf(path: string) {
   const value = path.split("?")[0] ?? "";
   const dot = value.lastIndexOf(".");
   return dot > -1 ? value.slice(dot + 1).toLowerCase() : "";
-}
-
-function pickMedia(media: MediaLike[], preferredType: MediaLike["type"]) {
-  return media.find((item) => item.type === preferredType && (item.publicUrl || item.url));
 }
 
 export function ExerciseVisual({
@@ -26,6 +18,7 @@ export function ExerciseVisual({
   frameAnimationUrls = [],
   frameIntervalMs = 700,
   preferFallbackImage = false,
+  context = "CATALOG",
   title,
   className = "",
   compact = false,
@@ -36,6 +29,7 @@ export function ExerciseVisual({
   frameAnimationUrls?: string[];
   frameIntervalMs?: number;
   preferFallbackImage?: boolean;
+  context?: ExerciseMediaContext;
   title: string;
   className?: string;
   compact?: boolean;
@@ -44,21 +38,20 @@ export function ExerciseVisual({
   const [imageFailed, setImageFailed] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
   const [frameIndex, setFrameIndex] = useState(0);
-  const thumbnail = pickMedia(media, "THUMBNAIL");
-  const image = pickMedia(media, "IMAGE");
-  const animation = pickMedia(media, "ANIMATION");
-
-  const preferredImageSrc =
-    thumbnail?.publicUrl ||
-    thumbnail?.url ||
-    image?.publicUrl ||
-    image?.url ||
-    "";
-  const animSrc = animation?.publicUrl || animation?.url || fallbackAnimation || "";
-  const imageSrc = preferFallbackImage
-    ? (fallbackImage || preferredImageSrc || "")
-    : (preferredImageSrc || fallbackImage || "");
-
+  // `preferFallbackImage` is retained for backward-compatible callers but no
+  // longer changes precedence: central media resolution prevents historic JPGs
+  // from winning over an available technical asset.
+  void preferFallbackImage;
+  const resolved = resolveExerciseMedia({
+    media,
+    fallbackThumbnailPath: fallbackImage,
+    fallbackImagePath: fallbackImage,
+    fallbackAnimationPath: fallbackAnimation,
+    primaryAnimationPath: fallbackAnimation,
+  }, context);
+  const animSrc = resolved.animation || "";
+  const imageSrc = resolved.image || "";
+  const animation = media.find((item) => (item.publicUrl || item.url) === animSrc);
   const format = (animation?.format || extOf(animSrc)).toLowerCase();
 
   const isVideo = format === "mp4" || format === "webm";
