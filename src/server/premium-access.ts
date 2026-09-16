@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
-import { hasPremiumAccess } from "@/src/lib/premium-access-rules";
+import { hasFullAccess } from "@/src/lib/premium-access-rules";
 import { getAuthenticatedUserProfile } from "@/src/server/fitness-queries";
 
 type PremiumProfile = Awaited<ReturnType<typeof getAuthenticatedUserProfile>>;
@@ -8,7 +8,7 @@ type PremiumProfile = Awaited<ReturnType<typeof getAuthenticatedUserProfile>>;
 export async function requirePremiumAccess(): Promise<PremiumProfile> {
   const profile = await getAuthenticatedUserProfile();
 
-  if (!hasPremiumAccess(profile)) {
+  if (!hasFullAccess(profile)) {
     redirect("/settings?access=premium");
   }
 
@@ -18,7 +18,7 @@ export async function requirePremiumAccess(): Promise<PremiumProfile> {
 export async function requirePremiumApiAccess() {
   const profile = await getAuthenticatedUserProfile();
 
-  if (!hasPremiumAccess(profile)) {
+  if (!hasFullAccess(profile)) {
     return {
       ok: false as const,
       response: NextResponse.json({ error: "premium_required" }, { status: 402 }),

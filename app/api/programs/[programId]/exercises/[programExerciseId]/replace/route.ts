@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
-import { getOrCreateDemoProfile } from "@/src/server/fitness-queries";
+import { requirePremiumAccess } from "@/src/server/premium-access";
 
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ programId: string; programExerciseId: string }> },
 ) {
   try {
-    const profile = await getOrCreateDemoProfile();
+    const profile = await requirePremiumAccess();
     const params = await context.params;
     const programId = String(params.programId ?? "").trim();
     const programExerciseId = String(params.programExerciseId ?? "").trim();

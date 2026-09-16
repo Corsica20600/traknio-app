@@ -9,14 +9,19 @@ export async function startOrResumeWorkout(tx: Prisma.TransactionClient, input: 
   programDayId?: string;
   title?: string;
   requireProgramDay?: boolean;
+  allowedProgramId?: string | null;
 }) {
+  if (input.allowedProgramId !== undefined && (!input.allowedProgramId || input.programId !== input.allowedProgramId)) throw new WorkoutStartError("trial_program_required");
   // One profile lock, even if two devices submit different request IDs simultaneously.
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`workout-start:${input.userProfileId}`}, 0))`;
   const active = await tx.workoutSession.findFirst({
     where: { userProfileId: input.userProfileId, status: "IN_PROGRESS" },
-    orderBy: { createdAt: "desc" }, select: { id: true },
+    orderBy: { createdAt: "desc" }, select: { id: true, ...(input.allowedProgramId !== undefined ? { programId: true } : {}) },
   });
-  if (active) return { sessionId: active.id, resumed: true };
+  if (active) {
+    if (input.allowedProgramId !== undefined && active.programId !== input.allowedProgramId) throw new WorkoutStartError("trial_program_required");
+    return { sessionId: active.id, resumed: true };
+  }
 
   const program = input.programId ? await tx.program.findFirst({
     where: { id: input.programId, userProfileId: input.userProfileId,
@@ -28,6 +33,7 @@ export async function startOrResumeWorkout(tx: Prisma.TransactionClient, input: 
   const exactDay = program?.days.find(day => day.id === input.programDayId);
   if (input.requireProgramDay && (!program || !exactDay)) throw new WorkoutStartError("program_day_not_found");
   const day = exactDay ?? program?.days[0];
+  if (input.allowedProgramId !== undefined && (!program || !day?._count.exercises)) throw new WorkoutStartError("program_day_empty");
   if (input.requireProgramDay && !day?._count.exercises) throw new WorkoutStartError("program_day_empty");
   const title = input.title?.trim();
   const session = await tx.workoutSession.create({

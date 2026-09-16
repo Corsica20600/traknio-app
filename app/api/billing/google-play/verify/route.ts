@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/src/lib/prisma";
+import { syncGooglePlayPurchase, GooglePlaySyncError } from "@/src/server/google-play-sync";
 import {
-  hashGooglePlayPurchaseToken,
   isGooglePlayBillingConfigured,
-  verifyGooglePlaySubscription,
 } from "@/src/server/google-play-billing";
 import { getAuthenticatedUserProfile } from "@/src/server/fitness-queries";
 
@@ -59,26 +57,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const verified = await verifyGooglePlaySubscription({ packageName, purchaseToken });
-
-    if (verified.productId && verified.productId !== productId) {
-      return NextResponse.json({ ok: false, error: "product_mismatch" }, { status: 400 });
-    }
-
-    await prisma.userProfile.update({
-      where: { id: profile.id },
-      data: {
-        googlePlayPurchaseTokenHash: hashGooglePlayPurchaseToken(purchaseToken),
-        googlePlayOrderId: verified.orderId,
-        googlePlayProductId: productId,
-        googlePlayBasePlanId: verified.basePlanId,
-        googlePlayPackageName: packageName,
-        subscriptionStatus: verified.status,
-        subscriptionPriceId: productId,
-        subscriptionCurrentPeriodEnd: verified.currentPeriodEnd,
-        subscriptionCancelAtPeriodEnd: verified.status === "CANCELED",
-      },
-    });
+    const verified = await syncGooglePlayPurchase({ userProfileId: profile.id, packageName, productId, purchaseToken });
+    if (!verified) return NextResponse.json({ ok: false, error: "profile_not_found" }, { status: 404 });
 
     return NextResponse.json({
       ok: true,
@@ -91,7 +71,8 @@ export async function POST(request: Request) {
       rawState: verified.rawState,
     });
   } catch (error) {
-    console.error("[GOOGLE_PLAY_VERIFY]", error);
+    if (error instanceof GooglePlaySyncError) return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
+    console.error("[GOOGLE_PLAY_VERIFY] verification_failed");
     return NextResponse.json({ ok: false, error: "google_play_verify_failed" }, { status: 502 });
   }
 }

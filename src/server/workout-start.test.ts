@@ -41,6 +41,20 @@ function fixture(options: { active?: boolean; missing?: boolean; empty?: boolean
 }
 const selection = { userProfileId: "owner", programId: "program", programDayId: "day", requireProgramDay: true };
 
+test("trial cannot start a free workout or a different program", async () => {
+  for (const programId of [undefined, "other"]) {
+    const { tx, calls } = fixture();
+    await assert.rejects(startOrResumeWorkout(tx, { ...selection, programId, allowedProgramId: "program" }), /trial_program_required/);
+    assert.equal(calls.some(call => call.name === "create"), false);
+  }
+});
+test("trial can start the selected program on phone and watch", async () => {
+  for (const requireProgramDay of [false, true]) {
+    const { tx } = fixture();
+    assert.equal((await startOrResumeWorkout(tx, { ...selection, requireProgramDay, allowedProgramId: "program" })).sessionId, "new");
+  }
+});
+
 test("watch resumes the active session before reading or creating a program session", async () => {
   const { tx, calls } = fixture({ active: true });
   assert.deepEqual(await startOrResumeWorkout(tx, selection), { sessionId: "existing", resumed: true });

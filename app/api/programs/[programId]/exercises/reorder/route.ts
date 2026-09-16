@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
-import { getOrCreateDemoProfile } from "@/src/server/fitness-queries";
+import { requirePremiumAccess } from "@/src/server/premium-access";
 
 type ReorderPayload = {
   exerciseId?: string;
@@ -11,7 +11,7 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ programId: string }> },
 ) {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await requirePremiumAccess();
   const { programId } = await context.params;
   const cleanProgramId = String(programId ?? "").trim();
   if (!cleanProgramId) {

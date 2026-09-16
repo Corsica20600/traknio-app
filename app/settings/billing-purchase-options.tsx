@@ -31,3 +31,9 @@ export function WebOnly({ children }: { children: ReactNode }) {
   if (android !== false) return null;
   return <>{children}</>;
 }
+
+export function GooglePlayRefresh() {
+  const android = useNativeAndroidApp();
+  if (!android) return null;
+  return <a className="ghost-btn full-line" href="traknio://billing/google-play?plan=monthly">Vérifier mon abonnement Google Play</a>;
+}

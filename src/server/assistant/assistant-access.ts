@@ -1,6 +1,6 @@
-import { hasPremiumAccess } from "@/src/lib/premium-access-rules";
+import { hasFullAccess } from "@/src/lib/premium-access-rules";
 
-type AssistantAccessProfile = Parameters<typeof hasPremiumAccess>[0];
+type AssistantAccessProfile = Parameters<typeof hasFullAccess>[0];
 type Environment = Record<string, string | undefined>;
 
 function isEnabled(value: string | undefined) {
@@ -15,5 +15,5 @@ export function isTraknioAssistantEnabled(environment: Environment = process.env
 
 /** The assistant follows the existing Traknio premium entitlement. */
 export function hasTraknioAssistantAccess(profile: AssistantAccessProfile, environment: Environment = process.env) {
-  return isTraknioAssistantEnabled(environment) && hasPremiumAccess(profile);
+  return isTraknioAssistantEnabled(environment) && hasFullAccess(profile);
 }

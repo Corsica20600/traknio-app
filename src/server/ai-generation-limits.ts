@@ -1,6 +1,7 @@
 import { prisma } from "@/src/lib/prisma";
 import { getOrCreateDemoProfile } from "@/src/server/fitness-queries";
-import { hasSubscriptionAccess } from "@/src/lib/premium-access-rules";
+import { hasFullAccess } from "@/src/lib/premium-access-rules";
+import { getTrialProgramId } from "./trial-program-access";
 import type { Prisma } from "@prisma/client";
 
 export const AI_PROGRAM_GENERATION_MONTHLY_LIMIT = 4;
@@ -32,7 +33,7 @@ export async function reserveAiProgramGeneration(input: {
   level: string;
 }): Promise<AiGenerationLimitResult> {
   const profile = await getOrCreateDemoProfile();
-  const trial = !hasSubscriptionAccess(profile);
+  const trial = !hasFullAccess(profile);
   const periodKey = trial ? "ACCOUNT_TRIAL" : getCurrentPeriodKey();
   const limit = trial ? 1 : AI_PROGRAM_GENERATION_MONTHLY_LIMIT;
 
@@ -46,12 +47,13 @@ export async function reserveAiProgramGeneration(input: {
     const used = await tx.aiProgramGeneration.count({
       where: {
         userProfileId: profile.id,
-        periodKey,
+        // Include older Google Play trial generations, previously stored monthly.
+        ...(trial ? {} : { periodKey }),
         status: { in: ["RESERVED", "SUCCESS"] },
       },
     });
 
-    if (used >= limit) {
+    if (used >= limit || (trial && await getTrialProgramId(tx, profile.id))) {
       return {
         ok: false as const,
         error: "ai_generation_limit_reached" as const,

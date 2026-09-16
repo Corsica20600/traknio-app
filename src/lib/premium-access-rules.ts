@@ -29,13 +29,19 @@ export function getFreeAccessEmails() {
 export function hasSubscriptionAccess(profile: AccessProfile, now = Date.now()) {
   const email = profile.email?.trim().toLowerCase();
   if (email && getFreeAccessEmails().has(email)) return true;
-  if (profile.subscriptionStatus === "ACTIVE") return true;
-
   const entitlementEnd = profile.subscriptionCurrentPeriodEnd?.getTime() ?? 0;
   return entitlementEnd > now
-    && ["TRIALING", "PAST_DUE", "CANCELED"].includes(profile.subscriptionStatus);
+    && ["ACTIVE", "TRIALING", "PAST_DUE", "CANCELED"].includes(profile.subscriptionStatus);
 }
 
+/** Full features require a paid entitlement (or an explicitly granted access). */
+export function hasFullAccess(profile: AccessProfile, now = Date.now()) {
+  const email = profile.email?.trim().toLowerCase();
+  if (email && getFreeAccessEmails().has(email)) return true;
+  return profile.subscriptionStatus !== "TRIALING" && hasSubscriptionAccess(profile, now);
+}
+
+/** Training access; use hasFullAccess for catalogue, coaching and advanced tracking. */
 export function hasPremiumAccess(profile: AccessProfile, now = Date.now()) {
   return hasSubscriptionAccess(profile, now) || hasActiveAccountTrial(profile, now);
 }

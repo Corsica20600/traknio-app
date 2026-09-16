@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
-import { getOrCreateDemoProfile } from "@/src/server/fitness-queries";
+import { requirePremiumAccess } from "@/src/server/premium-access";
 
 type ProgramExerciseContext = {
   params: Promise<{ programId: string; programExerciseId: string }>;
@@ -26,7 +26,7 @@ async function findOwnedProgramExercise(programId: string, programExerciseId: st
 
 export async function PATCH(request: Request, context: ProgramExerciseContext) {
   try {
-    const profile = await getOrCreateDemoProfile();
+    const profile = await requirePremiumAccess();
     const params = await context.params;
     const programId = String(params.programId ?? "").trim();
     const programExerciseId = String(params.programExerciseId ?? "").trim();
@@ -78,7 +78,7 @@ export async function PATCH(request: Request, context: ProgramExerciseContext) {
 
 export async function DELETE(_request: Request, context: ProgramExerciseContext) {
   try {
-    const profile = await getOrCreateDemoProfile();
+    const profile = await requirePremiumAccess();
     const params = await context.params;
     const programId = String(params.programId ?? "").trim();
     const programExerciseId = String(params.programExerciseId ?? "").trim();

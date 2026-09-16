@@ -1,3 +1,4 @@
+import { googlePlayEntitlement, type GooglePlayLineItem } from "../lib/google-play-entitlement";
 import { createHash, createSign } from "crypto";
 
 type GooglePlayServiceAccount = {
@@ -6,16 +7,10 @@ type GooglePlayServiceAccount = {
   token_uri?: string;
 };
 
-type GooglePlaySubscriptionLineItem = {
-  productId?: string;
-  expiryTime?: string;
-  offerDetails?: {
-    basePlanId?: string;
-    offerId?: string;
-  };
-};
+type GooglePlaySubscriptionLineItem = GooglePlayLineItem;
 
 type GooglePlaySubscriptionPurchase = {
+  startTime?: string;
   subscriptionState?: string;
   latestOrderId?: string;
   lineItems?: GooglePlaySubscriptionLineItem[];
@@ -23,6 +18,7 @@ type GooglePlaySubscriptionPurchase = {
 
 export type VerifiedGooglePlaySubscription = {
   active: boolean;
+  cancelAtPeriodEnd: boolean;
   status:
     | "ACTIVE"
     | "TRIALING"
@@ -73,6 +69,10 @@ export function isGooglePlayBillingConfigured() {
   );
 }
 
+export function getGooglePlayServiceAccountEmail() {
+  return getServiceAccount()?.client_email?.trim() ?? null;
+}
+
 async function getAndroidPublisherAccessToken() {
   const account = getServiceAccount();
   if (!account?.client_email || !account.private_key) {
@@ -95,6 +95,7 @@ async function getAndroidPublisherAccessToken() {
     .sign(account.private_key, "base64url");
 
   const response = await fetch(account.token_uri || "https://oauth2.googleapis.com/token", {
+    signal: AbortSignal.timeout(8000),
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -115,18 +116,6 @@ async function getAndroidPublisherAccessToken() {
   return body.access_token;
 }
 
-function mapSubscriptionState(state: string | undefined, offerId?: string): VerifiedGooglePlaySubscription["status"] {
-  if (state === "SUBSCRIPTION_STATE_ACTIVE" && offerId === "trial-7-days") return "TRIALING";
-  if (state === "SUBSCRIPTION_STATE_ACTIVE") return "ACTIVE";
-  if (state === "SUBSCRIPTION_STATE_IN_GRACE_PERIOD") return "PAST_DUE";
-  if (state === "SUBSCRIPTION_STATE_ON_HOLD") return "UNPAID";
-  if (state === "SUBSCRIPTION_STATE_PAUSED") return "PAUSED";
-  if (state === "SUBSCRIPTION_STATE_CANCELED") return "CANCELED";
-  if (state === "SUBSCRIPTION_STATE_PENDING") return "INCOMPLETE";
-  if (state === "SUBSCRIPTION_STATE_EXPIRED") return "FREE";
-  return "FREE";
-}
-
 export function hashGooglePlayPurchaseToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
@@ -141,6 +130,7 @@ export async function verifyGooglePlaySubscription(input: {
   );
 
   const response = await fetch(url, {
+    signal: AbortSignal.timeout(8000),
     headers: { authorization: `Bearer ${accessToken}` },
   });
 
@@ -181,22 +171,14 @@ export async function verifyGooglePlaySubscription(input: {
   const purchase = (await response.json()) as GooglePlaySubscriptionPurchase;
   const lineItem = purchase.lineItems?.[0] ?? null;
   const offerId = lineItem?.offerDetails?.offerId;
-  const status = mapSubscriptionState(purchase.subscriptionState, offerId);
-  const expiryTime = lineItem?.expiryTime ? new Date(lineItem.expiryTime) : null;
-  const hasRemainingEntitlement = expiryTime ? expiryTime.getTime() > Date.now() : true;
-  const active =
-    (purchase.subscriptionState === "SUBSCRIPTION_STATE_ACTIVE" && hasRemainingEntitlement)
-    || (purchase.subscriptionState === "SUBSCRIPTION_STATE_IN_GRACE_PERIOD" && hasRemainingEntitlement)
-    || (purchase.subscriptionState === "SUBSCRIPTION_STATE_CANCELED" && hasRemainingEntitlement);
+  const entitlement = googlePlayEntitlement(purchase.subscriptionState, lineItem, purchase.startTime);
 
   return {
-    active,
-    status,
+    ...entitlement,
     productId: lineItem?.productId ?? null,
     basePlanId: lineItem?.offerDetails?.basePlanId ?? null,
     offerId: offerId ?? null,
     orderId: purchase.latestOrderId ?? null,
-    currentPeriodEnd: expiryTime && !Number.isNaN(expiryTime.getTime()) ? expiryTime : null,
     rawState: purchase.subscriptionState ?? null,
   };
 }

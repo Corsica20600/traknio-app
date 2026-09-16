@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   if (!access.userProfileId) return NextResponse.json({ error: "watch_profile_required" }, { status: 401 });
   const cursor = new URL(request.url).searchParams.get("cursor")?.trim();
   const programs = await prisma.program.findMany({
-    where: { userProfileId: access.userProfileId, status: { not: "ARCHIVED" }, ...(cursor ? { id: { gt: cursor } } : {}) },
+    where: { userProfileId: access.userProfileId, status: { not: "ARCHIVED" }, id: { ...(cursor ? { gt: cursor } : {}), ...(access.allowedProgramId !== undefined ? { in: access.allowedProgramId ? [access.allowedProgramId] : [] } : {}) } },
     orderBy: { id: "asc" }, take: 21,
     select: { id: true, name: true, days: { orderBy: { dayIndex: "asc" },
       select: { id: true, title: true, focus: true, _count: { select: { exercises: true } } } } },

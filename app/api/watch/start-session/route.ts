@@ -16,11 +16,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_start_request" }, { status: 400 });
   }
   const selection = { programId: body.programId.trim(), programDayId: body.programDayId.trim() };
+  // Check before receipt replay as well as inside execution: an old paid request
+  // must not reopen another program after the account returns to limited access.
+  if (access.allowedProgramId !== undefined && selection.programId !== access.allowedProgramId) {
+    return NextResponse.json({ error: "trial_program_required" }, { status: 403 });
+  }
   try {
     const result = await runIdempotentWatchAction<{ sessionId: string; resumed: boolean }>({
       userProfileId: access.userProfileId, requestId, operation: "start-session", payload: selection,
       execute: async tx => ({ status: 200, body: { payload: await startOrResumeWorkout(tx, {
-        ...selection, userProfileId: access.userProfileId!, requireProgramDay: true,
+        ...selection, userProfileId: access.userProfileId!, requireProgramDay: true, allowedProgramId: access.allowedProgramId,
       }) } }),
     });
     if (result.status !== 200 || !result.body.payload) return NextResponse.json(result.body, { status: result.status });

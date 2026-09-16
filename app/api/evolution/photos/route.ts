@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { hasPremiumAccess } from "@/src/lib/premium-access-rules";
+import { hasFullAccess } from "@/src/lib/premium-access-rules";
 import { createProgressPhoto } from "@/src/server/progress-photos";
 import { getAuthenticatedUserProfile } from "@/src/server/fitness-queries";
 
@@ -15,7 +15,7 @@ function logProgressPhotoUpload(stage: string, details: Record<string, unknown> 
 async function getAccess() {
   const profile = await getAuthenticatedUserProfile().catch(() => null);
   if (!profile) return { ok: false as const, response: NextResponse.json({ error: "auth_required" }, { status: 401 }) };
-  if (!hasPremiumAccess(profile)) return { ok: false as const, response: NextResponse.json({ error: "premium_required" }, { status: 402 }) };
+  if (!hasFullAccess(profile)) return { ok: false as const, response: NextResponse.json({ error: "premium_required" }, { status: 402 }) };
   return { ok: true as const, profile };
 }
 

@@ -12,6 +12,7 @@ import { GuidedWorkoutClient } from "@/src/components/workout/guided-workout-cli
 import { getExerciseDisplayName, getExerciseOverride } from "@/src/lib/exercise-overrides";
 import { resolveExerciseMedia } from "@/src/lib/exercise-media-resolver";
 import { privatePageMetadata } from "@/src/lib/private-page-metadata";
+import { hasFullAccess } from "@/src/lib/premium-access-rules";
 
 export const metadata = privatePageMetadata(
   "Séance",
@@ -35,12 +36,13 @@ function formatWorkoutLabel(label?: string | null) {
 
 export default async function WorkoutPage() {
   await connection();
-  const { programs, sessionExercises, currentSession, lastPerformedProgramId, spotifyConnection } = await getWorkoutPageData();
+  const { profile, programs, sessionExercises, currentSession, lastPerformedProgramId, spotifyConnection } = await getWorkoutPageData();
+  const fullAccess = hasFullAccess(profile);
   const spotifyConnected = spotifyConnection?.status === "CONNECTED";
   const heroExercise = sessionExercises[0] ?? null;
   const defaultProgramId = programs.some((program) => program.id === lastPerformedProgramId)
     ? lastPerformedProgramId
-    : (programs.find((program) => program.status === "ACTIVE")?.id ?? "");
+    : (programs.find((program) => program.status === "ACTIVE")?.id ?? (fullAccess ? "" : programs[0]?.id ?? ""));
   const heroTitle = currentSession
     ? (formatWorkoutLabel(currentSession.title) || "Séance du jour")
     : "Séance guidée";
@@ -66,7 +68,7 @@ export default async function WorkoutPage() {
               name="programId"
               defaultValue={defaultProgramId ?? ""}
               options={[
-                { value: "", label: "Sans programme" },
+                ...(fullAccess ? [{ value: "", label: "Sans programme" }] : []),
                 ...programs.map((program) => ({
                   value: program.id,
                   label: formatWorkoutLabel(program.name) || program.name,

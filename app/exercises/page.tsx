@@ -1,3 +1,4 @@
+import { requirePremiumAccess } from "@/src/server/premium-access";
 import Link from "next/link";
 import { ActiveFilterChips } from "@/src/components/exercise/active-filter-chips";
 import { ExerciseCard } from "@/src/components/exercise/exercise-card";
@@ -72,6 +73,7 @@ function Pagination({
 }
 
 export default async function ExercisesPage(props: PageProps<"/exercises">) {
+  await requirePremiumAccess();
   const searchParams = await props.searchParams;
   const search = firstParam(searchParams.q).trim();
   const muscle = firstParam(searchParams.muscle).trim();

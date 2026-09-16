@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { hasPremiumAccess } from "@/src/lib/premium-access-rules";
+import { hasFullAccess } from "@/src/lib/premium-access-rules";
 import { hasTraknioCoachAccess } from "@/src/server/coach/coach-access";
 import {
   generateCurrentCoachWeeklyReport,
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 async function getCoachAccess() {
   const profile = await getAuthenticatedUserProfile().catch(() => null);
   if (!profile) return { ok: false as const, response: NextResponse.json({ error: "auth_required" }, { status: 401 }) };
-  if (!hasPremiumAccess(profile)) {
+  if (!hasFullAccess(profile)) {
     return { ok: false as const, response: NextResponse.json({ error: "premium_required" }, { status: 402 }) };
   }
   if (!hasTraknioCoachAccess(profile)) {

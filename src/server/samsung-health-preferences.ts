@@ -1,10 +1,10 @@
 import { prisma } from "@/src/lib/prisma";
-import { getOrCreateDemoProfile } from "@/src/server/fitness-queries";
+import { requirePremiumAccess } from "@/src/server/premium-access";
 
 const PREF_NOTE = "{\"provider\":\"samsung_health_pref\",\"key\":\"auto_sync\"}";
 
 export async function getSamsungAutoSyncPreference() {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await requirePremiumAccess();
   const latest = await prisma.progressMetric.findFirst({
     where: {
       userProfileId: profile.id,
@@ -19,7 +19,7 @@ export async function getSamsungAutoSyncPreference() {
 }
 
 export async function setSamsungAutoSyncPreference(enabled: boolean) {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await requirePremiumAccess();
   await prisma.progressMetric.create({
     data: {
       userProfileId: profile.id,

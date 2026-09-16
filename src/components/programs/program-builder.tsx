@@ -94,7 +94,7 @@ function ExerciseRow({ ex, index, total, update, move, remove, replace }: { ex: 
   </article>;
 }
 
-export function ProgramBuilder({ accountId, profile, programId }: { accountId: string; profile: { goal: string; level: string; sessionsPerWeek: number }; programId?: string }) {
+export function ProgramBuilder({ accountId, profile, programId, canDelete = true }: { accountId: string; profile: { goal: string; level: string; sessionsPerWeek: number }; programId?: string; canDelete?: boolean }) {
   const router = useRouter();
   const storageKey = `traknio.program-draft.v1:${accountId}:${programId ?? "new"}`;
   const [opened, setOpened] = useState(false);
@@ -212,7 +212,7 @@ export function ProgramBuilder({ accountId, profile, programId }: { accountId: s
         {step === 3 ? <div className={styles.list}><h3>{draft.name}</h3>{draft.days.map(item => <section className={styles.exercise} key={item.id}><h4>{item.title}</h4>{item.exercises.length ? item.exercises.map(ex => <p key={ex.id}>{ex.name} · {exerciseSummary(ex)}</p>) : <p>Séance vide : ajoute des exercices pour l’activer.</p>}</section>)}<p className="muted">« Activer » remplace ton programme actif pour les prochaines séances, sans effacer ton historique.</p></div> : null}
         <div className={styles.footer}><button type="button" onClick={() => void save(false)}>Enregistrer</button>{step === 3 ? <PrimaryButton type="button" onClick={() => void save(true)}>Enregistrer et activer</PrimaryButton> : null}</div>
         {draft.revision ? <button type="button" onClick={() => { if (window.confirm("Recharger la version enregistrée ? Les modifications locales seront abandonnées.")) { try { localStorage.removeItem(storageKey); } catch { setStorageError(true); } void openEditor(draft.id); } }}>Recharger la version enregistrée</button> : null}
-        {programId ? <details><summary>Supprimer ce programme</summary><p>L’historique des entraînements sera conservé.</p><button type="button" onClick={async () => {
+        {programId && canDelete ? <details><summary>Supprimer ce programme</summary><p>L’historique des entraînements sera conservé.</p><button type="button" onClick={async () => {
           if (busyRef.current || !window.confirm("Supprimer définitivement ce programme ? Tes entraînements passés sont conservés.")) return;
           busyRef.current = true; setBusy(true);
           try {

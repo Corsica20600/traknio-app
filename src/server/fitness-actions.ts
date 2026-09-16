@@ -1,5 +1,8 @@
 "use server";
 
+import { requirePremiumAccess } from "@/src/server/premium-access";
+import { hasFullAccess } from "@/src/lib/premium-access-rules";
+import { getTrialProgramId } from "./trial-program-access";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/src/lib/prisma";
@@ -10,7 +13,7 @@ import { getAuthenticatedUserProfile } from "@/src/server/fitness-queries";
 import { ownsAccessibleWorkout } from "@/src/server/workout-access";
 
 export async function createSimpleProgramAction(formData: FormData) {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await requirePremiumAccess();
   const name = String(formData.get("name") ?? "Programme MVP").trim();
   const programName = name.length ? name : "Programme MVP";
   const goal = String(formData.get("goal") ?? "HYPERTROPHY");
@@ -40,6 +43,7 @@ export async function createSimpleProgramAction(formData: FormData) {
 
 export async function startWorkoutSessionAction(formData: FormData) {
   const profile = await getOrCreateDemoProfile();
+  const allowedProgramId = hasFullAccess(profile) ? undefined : await getTrialProgramId(prisma, profile.id);
   const activeSession = await prisma.workoutSession.findFirst({
     where: { userProfileId: profile.id, status: "IN_PROGRESS" },
     select: { id: true },
@@ -49,7 +53,7 @@ export async function startWorkoutSessionAction(formData: FormData) {
   if (activeSession) redirect("/workout");
 
   await prisma.$transaction(tx => startOrResumeWorkout(tx, {
-    userProfileId: profile.id,
+    userProfileId: profile.id, allowedProgramId,
     programId: String(formData.get("programId") ?? "").trim(),
     programDayId: String(formData.get("programDayId") ?? "").trim(),
     title: String(formData.get("title") ?? "Seance libre").trim(),
@@ -58,6 +62,7 @@ export async function startWorkoutSessionAction(formData: FormData) {
   revalidatePath("/workout");
   revalidatePath("/dashboard");
   revalidatePath("/history");
+  redirect("/workout");
 }
 
 export async function logWorkoutSetAction(formData: FormData) {
@@ -124,7 +129,7 @@ export async function completeWorkoutSessionAction(formData: FormData) {
 }
 
 export async function addExerciseToProgramDayAction(formData: FormData) {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await requirePremiumAccess();
   const programId = String(formData.get("programId") ?? "").trim();
   const dayId = String(formData.get("dayId") ?? "").trim();
   const exerciseId = String(formData.get("exerciseId") ?? "").trim();
@@ -170,7 +175,7 @@ export async function addExerciseToProgramDayAction(formData: FormData) {
 }
 
 export async function addProgramDayAction(formData: FormData) {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await requirePremiumAccess();
   const programId = String(formData.get("programId") ?? "").trim();
   if (!programId) return;
 
@@ -195,7 +200,7 @@ export async function addProgramDayAction(formData: FormData) {
 }
 
 export async function renameProgramDayAction(formData: FormData) {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await requirePremiumAccess();
   const programId = String(formData.get("programId") ?? "").trim();
   const dayId = String(formData.get("dayId") ?? "").trim();
   const title = String(formData.get("title") ?? "").trim();
@@ -220,7 +225,7 @@ export async function renameProgramDayAction(formData: FormData) {
 }
 
 export async function deleteProgramDayAction(formData: FormData) {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await requirePremiumAccess();
   const programId = String(formData.get("programId") ?? "").trim();
   const dayId = String(formData.get("dayId") ?? "").trim();
   if (!programId || !dayId) return;
@@ -255,7 +260,7 @@ export async function deleteProgramDayAction(formData: FormData) {
 }
 
 export async function resetProgramStructureAction() {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await requirePremiumAccess();
 
   const programs = await prisma.program.findMany({
     where: { userProfileId: profile.id },
@@ -285,7 +290,7 @@ export async function resetProgramStructureAction() {
 }
 
 export async function duplicateProgramDayExercisesAction(formData: FormData) {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await requirePremiumAccess();
   const programId = String(formData.get("programId") ?? "").trim();
   const sourceDayId = String(formData.get("sourceDayId") ?? "").trim();
   const targetDayId = String(formData.get("targetDayId") ?? "").trim();
@@ -328,7 +333,7 @@ export async function duplicateProgramDayExercisesAction(formData: FormData) {
 }
 
 export async function setProgramStatusAction(formData: FormData) {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await requirePremiumAccess();
   const programId = String(formData.get("programId") ?? "").trim();
   const nextStatus = String(formData.get("status") ?? "").trim();
   if (!programId || !["DRAFT", "ACTIVE", "ARCHIVED"].includes(nextStatus)) return;
@@ -364,7 +369,7 @@ export async function setProgramStatusAction(formData: FormData) {
 }
 
 export async function deleteProgramAction(formData: FormData) {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await requirePremiumAccess();
   const programId = String(formData.get("programId") ?? "").trim();
   if (!programId) return;
 
@@ -388,7 +393,7 @@ export async function deleteProgramAction(formData: FormData) {
 }
 
 export async function updateProgramExerciseAction(formData: FormData) {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await requirePremiumAccess();
   const programId = String(formData.get("programId") ?? "").trim();
   const programExerciseId = String(formData.get("programExerciseId") ?? "").trim();
   const sets = Number(formData.get("sets") ?? 3);
@@ -421,7 +426,7 @@ export async function updateProgramExerciseAction(formData: FormData) {
 }
 
 export async function deleteProgramExerciseAction(formData: FormData) {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await requirePremiumAccess();
   const programId = String(formData.get("programId") ?? "").trim();
   const programExerciseId = String(formData.get("programExerciseId") ?? "").trim();
   if (!programId || !programExerciseId) return;
@@ -440,7 +445,7 @@ export async function deleteProgramExerciseAction(formData: FormData) {
 }
 
 export async function replaceProgramExerciseAction(formData: FormData) {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await requirePremiumAccess();
   const programId = String(formData.get("programId") ?? "").trim();
   const programExerciseId = String(formData.get("programExerciseId") ?? "").trim();
   const exerciseId = String(formData.get("exerciseId") ?? "").trim();
@@ -464,7 +469,7 @@ export async function replaceProgramExerciseAction(formData: FormData) {
 }
 
 export async function moveProgramExercisePositionAction(formData: FormData) {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await requirePremiumAccess();
   const programId = String(formData.get("programId") ?? "").trim();
   const programExerciseId = String(formData.get("programExerciseId") ?? "").trim();
   const direction = String(formData.get("direction") ?? "").trim();
@@ -503,7 +508,7 @@ export async function moveProgramExercisePositionAction(formData: FormData) {
 }
 
 export async function applyWeeklyTemplateAction(formData: FormData) {
-  const profile = await getOrCreateDemoProfile();
+  const profile = await requirePremiumAccess();
   const programId = String(formData.get("programId") ?? "").trim();
   const sourceDayId = String(formData.get("sourceDayId") ?? "").trim();
   const selectedWeekdays = formData.getAll("weekdays").map((v) => String(v)).filter(Boolean);

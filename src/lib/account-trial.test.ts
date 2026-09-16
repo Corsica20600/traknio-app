@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ACCOUNT_TRIAL_MS, accountTrialEnd, hasPremiumAccess, hasSubscriptionAccess } from "./premium-access-rules";
+import { ACCOUNT_TRIAL_MS, accountTrialEnd, hasFullAccess, hasPremiumAccess, hasSubscriptionAccess } from "./premium-access-rules";
 import { canAccessExistingWorkout, ownsAccessibleWorkout } from "../server/workout-access";
 import { readFileSync } from "node:fs";
 
@@ -18,16 +18,18 @@ test("trial is explicit and expires at exactly seven days across month boundarie
   assert.equal(accountTrialEnd({ ...trial, trialEndsAt: new Date(end.getTime() + ACCOUNT_TRIAL_MS) }), end.getTime());
 });
 test("existing active subscribers retain access; billing trial must have an unexpired end", () => {
-  assert.equal(hasSubscriptionAccess({ ...free, subscriptionStatus: "ACTIVE" }), true);
+  assert.equal(hasSubscriptionAccess({ ...free, subscriptionStatus: "ACTIVE" }), false);
+  assert.equal(hasSubscriptionAccess({ ...free, subscriptionStatus: "ACTIVE", subscriptionCurrentPeriodEnd: end }, start.getTime()), true);
+  assert.equal(hasSubscriptionAccess({ ...free, subscriptionStatus: "ACTIVE", subscriptionCurrentPeriodEnd: end }, end.getTime()), false);
   assert.equal(hasSubscriptionAccess({ ...free, subscriptionStatus: "TRIALING" }), false);
   assert.equal(hasSubscriptionAccess({ ...free, subscriptionStatus: "TRIALING", subscriptionCurrentPeriodEnd: end }, end.getTime()), false);
   assert.equal(hasSubscriptionAccess({ ...free, subscriptionStatus: "CANCELED", subscriptionCurrentPeriodEnd: end }, start.getTime()), true);
 });
 test("post-trial continuation is scoped to owner, existing session and trial start window", async () => {
   let query: unknown;
-  const db = { workoutSession: { findFirst: async (args: unknown) => { query = args; return { id: "session" }; } } } as unknown as Parameters<typeof canAccessExistingWorkout>[3];
+  const db = { program: { findFirst: async () => ({ id: "first" }) }, workoutSession: { findFirst: async (args: unknown) => { query = args; return { id: "session" }; } } } as unknown as Parameters<typeof canAccessExistingWorkout>[3];
   assert.equal(await canAccessExistingWorkout(trial, "session", false, db), true);
-  assert.deepEqual(query, { where: { id: "session", userProfileId: "owner", status: "IN_PROGRESS", startedAt: { gte: start, lt: end } }, select: { id: true } });
+  assert.deepEqual(query, { where: { id: "session", userProfileId: "owner", programId: "first", status: "IN_PROGRESS", startedAt: { gte: start, lt: end } }, select: { id: true } });
   assert.equal(await canAccessExistingWorkout(free, "session", false, db), false);
   assert.equal(await ownsAccessibleWorkout(free, "", false, db), false);
 });
@@ -68,4 +70,19 @@ test("trial completion permits phone reconciliation but never the start-session 
   for (const route of ["syncWorkoutState", "current-session", "complete-session", "session-metrics", "validate-set"]) assert.ok(allowed.includes(`"${route}"`));
   assert.doesNotMatch(allowed, /"start-session"|"programs"/);
   assert.match(source, /body\?\.sessionId \?\? body\?\.workoutSessionId/);
+});
+
+test("both web and billing trials grant training but never full features", () => {
+  for (const profile of [trial, { ...free, subscriptionStatus: "TRIALING", subscriptionCurrentPeriodEnd: end }]) {
+    assert.equal(hasPremiumAccess(profile, start.getTime()), true);
+    assert.equal(hasFullAccess(profile, start.getTime()), false);
+  }
+  assert.equal(hasFullAccess({ ...free, subscriptionStatus: "ACTIVE", subscriptionCurrentPeriodEnd: end }, start.getTime()), true);
+});
+
+test("explicitly offered access survives expiry and a billing trial status", () => {
+  const previous = process.env.TRAKNIO_FREE_ACCESS_EMAILS;
+  process.env.TRAKNIO_FREE_ACCESS_EMAILS = "trial-test@example.invalid";
+  try { assert.equal(hasFullAccess({ ...free, subscriptionStatus: "TRIALING" }), true); }
+  finally { if (previous === undefined) delete process.env.TRAKNIO_FREE_ACCESS_EMAILS; else process.env.TRAKNIO_FREE_ACCESS_EMAILS = previous; }
 });

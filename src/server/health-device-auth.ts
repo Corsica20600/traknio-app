@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { hasPremiumAccess } from "@/src/lib/premium-access-rules";
+import { hasFullAccess } from "@/src/lib/premium-access-rules";
 import { prisma } from "@/src/lib/prisma";
 import { hashDeviceToken } from "@/src/lib/device-token";
 
@@ -35,7 +35,7 @@ export async function requireHealthSyncAccess(
     });
 
     if (device && !device.revokedAt) {
-      if (!hasPremiumAccess(device.userProfile)) {
+      if (!hasFullAccess(device.userProfile)) {
         return {
           ok: false,
           response: NextResponse.json({ ok: false, error: "premium_required" }, { status: 402 }),

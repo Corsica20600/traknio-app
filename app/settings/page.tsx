@@ -4,13 +4,13 @@ import { AppShell } from "@/src/components/ui/app-shell";
 import { GlassCard } from "@/src/components/ui/glass-card";
 import { PageHeader } from "@/src/components/ui/page-header";
 import { BRAND } from "@/src/lib/brand";
-import { getFreeAccessEmails, hasPremiumAccess, hasActiveAccountTrial, hasSubscriptionAccess } from "@/src/lib/premium-access-rules";
+import { getFreeAccessEmails, hasFullAccess, hasPremiumAccess, hasActiveAccountTrial, hasSubscriptionAccess } from "@/src/lib/premium-access-rules";
 import { activateAccountTrial } from "@/src/server/trial-actions";
 import { KeepScreenSetting } from "@/src/components/workout/keep-screen-setting";
 import { isStripeConfigured } from "@/src/lib/stripe";
 import { privatePageMetadata } from "@/src/lib/private-page-metadata";
 import { deleteAccountAction } from "@/src/server/account-actions";
-import { BillingPurchaseOptions, WebOnly } from "./billing-purchase-options";
+import { BillingPurchaseOptions, GooglePlayRefresh, WebOnly } from "./billing-purchase-options";
 import { createBillingCheckoutAction, openBillingPortalAction } from "@/src/server/billing-actions";
 import { getAccountSettingsData } from "@/src/server/fitness-queries";
 import { disconnectIntegrationAction, enableHealthConnectPreparationAction } from "@/src/server/integration-actions";
@@ -157,6 +157,7 @@ export default async function SettingsPage(props: SettingsPageProps) {
   const entitlementActive = subscriptionActive || internalFreeAccess;
   const subscriptionLabel = internalFreeAccess && !subscriptionActive ? "Actif"
     : hasActiveAccountTrial(accountData.profile) && !subscriptionActive ? "Essai gratuit actif"
+    : !subscriptionActive && subscriptionStatus === "ACTIVE" ? "Abonnement à actualiser"
     : getSubscriptionLabel(subscriptionStatus);
   const canOpenPortal = Boolean(accountData.profile.stripeCustomerId);
   const spotify = accountData.integrations.find((item) => item.provider === "SPOTIFY");
@@ -214,7 +215,7 @@ export default async function SettingsPage(props: SettingsPageProps) {
           <WebOnly>
             <form action={activateAccountTrial}>
               <h2>Essai web de 7 jours</h2>
-              <p>Un programme généré par IA inclus, modifiable manuellement. Essai commun au téléphone et à la montre, sans renouvellement automatique.</p>
+              <p>Un programme modifiable, avec une génération IA incluse, et ses séances sur téléphone et montre. Catalogue complet, coach et suivi avancé réservés aux abonnés. Sans renouvellement automatique.</p>
               <button type="submit" className="primary-button">Activer mon essai web</button>
             </form>
           </WebOnly>
@@ -258,13 +259,14 @@ export default async function SettingsPage(props: SettingsPageProps) {
         {billingError ? (
           <p className="settings-danger-error">{billingError}</p>
         ) : null}
-        {access === "premium" && !premiumAccess ? (
+        {access === "premium" && !hasFullAccess(accountData.profile) ? (
           <p className="settings-danger-error">
-            Choisis une offre pour continuer. Sur Android, les utilisateurs éligibles voient 7 jours gratuits avant le prix mensuel Google Play.
+            Cette fonction est réservée aux abonnés. L’essai comprend un programme et ses séances sur téléphone et montre.
           </p>
         ) : null}
         {connected ? (
           <div className="settings-billing-actions">
+            {accountData.profile.googlePlayPurchaseTokenHash ? <GooglePlayRefresh /> : null}
             {!entitlementActive ? (
               <BillingPurchaseOptions>
               <>
@@ -352,7 +354,7 @@ export default async function SettingsPage(props: SettingsPageProps) {
       </GlassCard>
       ) : null}
 
-      {premiumAccess ? (
+      {hasFullAccess(accountData.profile) ? (
       <section className="settings-grid" aria-label="Intégrations connectées">
         {integrationMessage ? (
           <p className="settings-success-message">{integrationMessage}</p>

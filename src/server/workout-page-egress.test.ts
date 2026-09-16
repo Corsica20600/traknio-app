@@ -34,7 +34,7 @@ test("active workout page fetches only its program day and targeted exercise wei
 
   assert.match(workoutPageBlock, /getLatestWeightByExerciseForWorkout/);
   assert.match(workoutPageBlock, /prisma\.programDay\.findFirst/);
-  assert.match(workoutPageBlock, /if \(sessionExercises\.length === 0\)/);
+  assert.match(workoutPageBlock, /if \(sessionExercises\.length === 0 && fullAccess\)/);
   assert.doesNotMatch(workoutPageBlock, /take:\s*500/);
   assert.doesNotMatch(workoutPageBlock, /prisma\.program\.findFirst\([\s\S]*include:\s*\{[\s\S]*days:/);
 });

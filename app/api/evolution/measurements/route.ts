@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { hasPremiumAccess } from "@/src/lib/premium-access-rules";
+import { hasFullAccess } from "@/src/lib/premium-access-rules";
 import { createBodyMeasurement, getEvolutionOverview } from "@/src/server/body-evolution";
 import { getAuthenticatedUserProfile } from "@/src/server/fitness-queries";
 import { BODY_MEASUREMENT_FIELDS, type BodyMeasurementInput } from "@/src/types/body-evolution";
@@ -25,7 +25,7 @@ const LIMITS = {
 async function getAccess() {
   const profile = await getAuthenticatedUserProfile().catch(() => null);
   if (!profile) return { ok: false as const, response: NextResponse.json({ error: "auth_required" }, { status: 401 }) };
-  if (!hasPremiumAccess(profile)) {
+  if (!hasFullAccess(profile)) {
     return { ok: false as const, response: NextResponse.json({ error: "premium_required" }, { status: 402 }) };
   }
   return { ok: true as const, profile };

@@ -1,6 +1,6 @@
-import { hasPremiumAccess } from "@/src/lib/premium-access-rules";
+import { hasFullAccess } from "@/src/lib/premium-access-rules";
 
-type CoachAccessProfile = Parameters<typeof hasPremiumAccess>[0];
+type CoachAccessProfile = Parameters<typeof hasFullAccess>[0];
 type Environment = Record<string, string | undefined>;
 
 function isEnabled(value: string | undefined) {
@@ -12,5 +12,5 @@ export function hasTraknioCoachAccess(profile: CoachAccessProfile, environment: 
   const enabled = environment.ENABLE_TRAKNIO_COACH === undefined
     ? environment.NODE_ENV !== "production"
     : isEnabled(environment.ENABLE_TRAKNIO_COACH);
-  return enabled && hasPremiumAccess(profile);
+  return enabled && hasFullAccess(profile);
 }

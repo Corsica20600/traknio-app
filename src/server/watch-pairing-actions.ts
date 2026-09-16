@@ -2,10 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/src/lib/prisma";
-import { requirePremiumAccess } from "@/src/server/premium-access";
+import { getAuthenticatedUserProfile } from "@/src/server/fitness-queries";
 
 export async function revokeWatchDeviceAction(formData: FormData) {
-  const profile = await requirePremiumAccess();
+  const profile = await getAuthenticatedUserProfile();
   const deviceId = String(formData.get("deviceId") ?? "").trim();
 
   if (!deviceId) {

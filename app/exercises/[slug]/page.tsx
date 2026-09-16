@@ -1,3 +1,4 @@
+import { requirePremiumAccess } from "@/src/server/premium-access";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AddToProgramForm } from "@/src/components/exercise/add-to-program-form";
@@ -49,6 +50,7 @@ function buildTips(input: {
 }
 
 export default async function ExerciseDetailPage(props: PageProps<"/exercises/[slug]">) {
+  await requirePremiumAccess();
   const { slug } = await props.params;
 
   const databaseGuide = await getTechnicalSheetFromDatabase(slug);

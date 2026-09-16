@@ -3,7 +3,8 @@ import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { prisma } from "@/src/lib/prisma";
 import { getExerciseDisplayName } from "@/src/lib/exercise-overrides";
-import { hasPremiumAccess } from "@/src/lib/premium-access-rules";
+import { hasFullAccess, hasPremiumAccess } from "@/src/lib/premium-access-rules";
+import { accessibleProgramWhere, getTrialProgramId } from "./trial-program-access";
 import { getSessionExerciseReplacements, resolveReplacementExercises } from "@/src/server/session-exercise-replacements";
 
 // Media resolution is pure. These relation includes only fetch the roles each
@@ -454,6 +455,11 @@ function getProfileDisplayName(name: string | null | undefined, email: string) {
 
 export async function getOrCreateDemoProfile(workout?: { sessionId?: string; resume?: boolean }) {
   const profile = await getAuthenticatedUserProfile();
+  if (workout?.sessionId && !hasFullAccess(profile)) {
+    const { ownsAccessibleWorkout } = await import("./workout-access");
+    if (!await ownsAccessibleWorkout(profile, workout.sessionId)) redirect("/settings?access=premium");
+    return profile;
+  }
   if (!hasPremiumAccess(profile)) {
     if (workout?.sessionId || workout?.resume) {
       const { canAccessExistingWorkout } = await import("./workout-access");
@@ -825,7 +831,7 @@ export async function getProgramsForDemoUser() {
   const profile = await getOrCreateDemoProfile();
 
   return prisma.program.findMany({
-    where: { userProfileId: profile.id },
+    where: await accessibleProgramWhere(prisma, profile),
     include: {
       days: {
         include: {
@@ -1036,17 +1042,20 @@ export async function getWorkoutSessionDetailForDemoUser(sessionId: string) {
 
 export async function getWorkoutPageData() {
   const profile = await getOrCreateDemoProfile({ resume: true });
+  const fullAccess = hasFullAccess(profile);
+  const allowedProgramId = fullAccess ? undefined : await getTrialProgramId(prisma, profile.id);
+  if (!fullAccess && !allowedProgramId) redirect("/programs");
 
   let exercises: ExerciseWithFrCompat[] = [];
   const [programs, currentSession, latestProgramSession] = await Promise.all([
     prisma.program.findMany({
-      where: { userProfileId: profile.id, status: { in: ["ACTIVE", "DRAFT"] } },
+      where: { userProfileId: profile.id, ...(allowedProgramId ? { id: allowedProgramId } : {}), status: { in: ["ACTIVE", "DRAFT"] } },
       orderBy: { createdAt: "desc" },
       take: 10,
       select: { id: true, name: true, status: true },
     }),
     prisma.workoutSession.findFirst({
-      where: { userProfileId: profile.id, status: "IN_PROGRESS" },
+      where: { userProfileId: profile.id, status: "IN_PROGRESS", ...(allowedProgramId ? { programId: allowedProgramId } : {}) },
       select: {
         id: true,
         programId: true,
@@ -1129,7 +1138,7 @@ export async function getWorkoutPageData() {
     }
   }
 
-  if (sessionExercises.length === 0) {
+  if (sessionExercises.length === 0 && fullAccess) {
     // The catalogue is only required for a free workout or a recovery from an
     // invalid/empty session. An active program already provides its exercises.
     try {
@@ -1167,6 +1176,7 @@ export async function getWorkoutPageData() {
 
 export async function getDashboardDataForDemoUser() {
   const profile = await getOrCreateDemoProfile();
+  if (!hasFullAccess(profile)) redirect("/programs");
   const now = new Date();
   const startOfWeek = getParisWeekStart(now);
   const previousWeekStart = getPreviousWeekStart(now);
@@ -1617,6 +1627,7 @@ export async function getProgressDataForDemoUser(periodOrExerciseId?: string) {
   const period = resolveProgressPeriod(periodOrExerciseId);
   const periodConfig = PROGRESS_PERIODS[period];
   const profile = await getOrCreateDemoProfile();
+  if (!hasFullAccess(profile)) redirect("/settings?access=premium");
   const now = new Date();
   const currentEnd = now;
   const currentStart = startOfLocalDay(addDays(currentEnd, -periodConfig.days + 1));
