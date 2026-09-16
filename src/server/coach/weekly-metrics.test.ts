@@ -3,6 +3,7 @@ import test from "node:test";
 
 import type { CoachWorkoutSession } from "./coach-types";
 import { calculateCoachWeeklyMetrics } from "./weekly-metrics";
+import { getRecoverySnapshot } from "./coach-weekly-report";
 
 const period = {
   key: "2026-02-02",
@@ -79,4 +80,21 @@ test("does not label an exercise as stagnant before three completed exposures", 
   assert.equal(metrics.exerciseProgress[0].trend, "INSUFFICIENT_DATA");
   assert.deepEqual(metrics.stagnantExerciseIds, []);
   assert.equal(metrics.sessions.missed, null);
+});
+
+test("progression uses the last recorded load, including zero, rather than the maximum", () => {
+  const session = completedSession("bench", "2026-01-05T12:00:00Z", "bench", "Bench", "Pectoraux", 10, 80);
+  session.sets.push({ ...session.sets[0], actualWeightKg: 50 }, { ...session.sets[0], actualWeightKg: null });
+  const input = { period, plannedSessions: null, sessions: [session] };
+  assert.equal(calculateCoachWeeklyMetrics(input).exerciseProgress[0].latestWeightKg, 50);
+  session.sets.push({ ...session.sets[0], actualWeightKg: 0 });
+  assert.equal(calculateCoachWeeklyMetrics(input).exerciseProgress[0].latestWeightKg, 0);
+});
+
+test("imported heart rate remains an average and is never labeled resting heart rate", () => {
+  const measuredAt = new Date("2026-09-16T08:00:00Z");
+  assert.deepEqual(getRecoverySnapshot([
+    { value: 78.4, measuredAt, notes: JSON.stringify({ metric: "heart_rate" }) },
+    { value: 450, measuredAt, notes: JSON.stringify({ metric: "sleep_minutes" }) },
+  ]), { averageHeartRate: 78, sleepMinutes: 450 });
 });

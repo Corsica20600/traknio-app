@@ -401,14 +401,6 @@ function scoreSleep(minutes: number | null) {
   return 14;
 }
 
-function scoreRestingHeartRate(bpm: number | null) {
-  if (bpm == null) return null;
-  if (bpm <= 60) return 30;
-  if (bpm <= 68) return 24;
-  if (bpm <= 76) return 17;
-  return 9;
-}
-
 function scoreActivity(calories: number | null) {
   if (calories == null) return null;
   return clampPercent(Math.min(20, (calories / 600) * 20));
@@ -1407,17 +1399,16 @@ export async function getDashboardDataForDemoUser() {
   }
 
   const sleepMinutes = healthByMetric.get("sleep_minutes")?.value != null ? Math.round(healthByMetric.get("sleep_minutes")!.value) : null;
-  const restingHeartRate = healthByMetric.get("heart_rate")?.value != null ? Math.round(healthByMetric.get("heart_rate")!.value) : null;
+  const averageHeartRate = healthByMetric.get("heart_rate")?.value != null ? Math.round(healthByMetric.get("heart_rate")!.value) : null;
   const caloriesToday = todayHealthByMetric.get("calories")?.value != null ? Math.round(todayHealthByMetric.get("calories")!.value) : null;
   const sleepPoints = scoreSleep(sleepMinutes);
-  const heartPoints = scoreRestingHeartRate(restingHeartRate);
   const activityPoints = scoreActivity(caloriesToday);
   const sessionPoints = scoreLastSession(sessionsWithStats[0]?.date ?? null);
-  const hasHealthReadinessData = sleepPoints != null || heartPoints != null || activityPoints != null;
+  const hasHealthReadinessData = sleepPoints != null || activityPoints != null;
   const availableMax = hasHealthReadinessData
-    ? (sleepPoints == null ? 0 : 40) + (heartPoints == null ? 0 : 30) + (activityPoints == null ? 0 : 20) + 10
+    ? (sleepPoints == null ? 0 : 40) + (activityPoints == null ? 0 : 20) + 10
     : 0;
-  const rawPoints = (sleepPoints ?? 0) + (heartPoints ?? 0) + (activityPoints ?? 0) + sessionPoints;
+  const rawPoints = (sleepPoints ?? 0) + (activityPoints ?? 0) + sessionPoints;
   const recoveryScore = availableMax > 0 ? clampPercent((rawPoints / availableMax) * 100) : null;
   const healthProvider = healthIntegrations.find((integration) => integration.status === "CONNECTED") ?? healthIntegrations[0] ?? null;
   const healthConnected = healthProvider?.status === "CONNECTED" || healthMetrics.length > 0;
@@ -1499,7 +1490,7 @@ export async function getDashboardDataForDemoUser() {
       score: recoveryScore,
       tone: recoveryScore == null ? "accent" : getRecoveryTone(recoveryScore),
       sleepLabel: formatSleep(sleepMinutes),
-      restingHeartRate,
+      averageHeartRate,
       caloriesToday,
       recommendation: recoveryScore == null
         ? healthPrepared

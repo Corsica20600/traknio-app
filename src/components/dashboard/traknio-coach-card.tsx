@@ -21,6 +21,7 @@ type CoachReport = {
   id: string;
   status: CoachStatus;
   response: CoachResponse | null;
+  metrics?: { recovery?: { restingHeartRate?: number } | null } | null;
   feedback: CoachFeedback | null;
   nextAvailableAt: string;
 };
@@ -62,7 +63,8 @@ function formatDataKey(key: string) {
     "totals.completedSets": "séries réalisées",
     "totals.durationSeconds": "durée des séances",
     "recovery.sleepMinutes": "sommeil",
-    "recovery.restingHeartRate": "fréquence cardiaque au repos",
+    "recovery.restingHeartRate": "fréquence cardiaque moyenne (ancien rapport)",
+    "recovery.averageHeartRate": "fréquence cardiaque moyenne",
     "recovery.calories": "calories",
     "limitations.declared": "limitations déclarées",
   };
@@ -230,6 +232,11 @@ export function TraknioCoachCard() {
 
       {state === "completed" && report?.response ? (
         <div className="grid gap-4">
+          {report.metrics?.recovery?.restingHeartRate !== undefined ? (
+            <p className="m-0 text-sm text-[var(--fit-text-muted)]">
+              Ce bilan ancien peut mentionner une FC au repos. La donnée importée était une moyenne : les conclusions de récupération fondées sur cette valeur ne sont pas fiables.
+            </p>
+          ) : null}
           <p className="m-0 text-sm font-semibold leading-relaxed text-[var(--fit-text-muted)]">{report.response.summary}</p>
 
           {report.response.positives.length > 0 ? (

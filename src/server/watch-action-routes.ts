@@ -15,6 +15,7 @@ import {
 } from "@/src/server/watch-mobile";
 import { runIdempotentWatchAction, type WatchActionOperation, type WatchActionResult } from "@/src/server/watch-action-idempotency";
 import { logSyncMetric, withSyncMetricContext } from "@/src/server/sync-metrics";
+import { lockWorkoutForSet } from "./workout-set-lock";
 
 type WatchAccess = { userProfileId?: string };
 
@@ -68,6 +69,10 @@ export async function executeWatchActionRoute(input: {
     operation: input.operation,
     payload: canonicalPayload,
     execute: async (tx): Promise<WatchActionResult<unknown>> => {
+      if (input.operation === "validate-set") {
+        const session = await lockWorkoutForSet(tx, sessionId, userProfileId);
+        if (!session || session.status !== "IN_PROGRESS") return { status: 404, body: { error: "session_not_found" } };
+      }
       const payload = await (async () => {
         switch (input.operation) {
           case "validate-set":

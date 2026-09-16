@@ -27,8 +27,8 @@ export function ExerciseAnatomy({
     <div className="sectionHeading"><span>Anatomie</span><h2 id="exercise-anatomy-title">Muscles sollicités</h2></div>
     {status === "REVIEW_REQUIRED" ? <p className="anatomyStatus">Illustrations anatomiques en validation. Les libellés ci-dessous restent la référence de la fiche.</p> : null}
     <div className="anatomyGrid">
-      <AnatomyCard title="Muscles principaux" tone="primary" media={{ src: primaryMedia, alt: "Vue postérieure anatomique avec le grand dorsal surligné en rouge." }} muscles={primaryMuscles} />
-      <AnatomyCard title="Muscles secondaires" tone="secondary" media={{ src: secondaryMedia, alt: "Vue anatomique trois-quarts avec les muscles secondaires du tirage vertical surlignés en bleu." }} muscles={secondaryMuscles} />
+      <AnatomyCard title="Muscles principaux" tone="primary" media={{ src: primaryMedia, alt: `Muscles principaux : ${primaryMuscles.join(", ")}.` }} muscles={primaryMuscles} />
+      <AnatomyCard title="Muscles secondaires" tone="secondary" media={{ src: secondaryMedia, alt: `Muscles secondaires : ${secondaryMuscles.join(", ")}.` }} muscles={secondaryMuscles} />
     </div>
   </section>;
 }

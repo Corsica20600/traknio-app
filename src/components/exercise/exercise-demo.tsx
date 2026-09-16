@@ -43,7 +43,7 @@ export function ExerciseDemo({ start, end, animation, idPrefix = "exercise" }: {
   }, [inView, mode, reducedMotion, webmFailed]);
 
   const animationAvailable = Boolean(animation && !animationFailed);
-  const activeMode = reducedMotion && mode === "animation" ? "start" : mode;
+  const activeMode = mode === "animation" && (reducedMotion || !animationAvailable) ? "start" : mode;
   const activeStatic = activeMode === "end" ? end : start;
   const panelId = `${idPrefix}-demo-panel`;
   const descriptionId = `${idPrefix}-animation-description`;
@@ -56,17 +56,19 @@ export function ExerciseDemo({ start, end, animation, idPrefix = "exercise" }: {
         <h2 id="exercise-demo-title">Le mouvement</h2>
       </div>
       <div className="demoTabs" role="tablist" aria-label="Position du mouvement">
-        {animationAvailable ? <button id={tabId("animation")} role="tab" type="button" aria-selected={mode === "animation"} aria-controls={panelId} onClick={() => setMode("animation")}>Animation</button> : null}
-        <button id={tabId("start")} role="tab" type="button" aria-selected={mode === "start"} aria-controls={panelId} onClick={() => setMode("start")}>Départ</button>
-        <button id={tabId("end")} role="tab" type="button" aria-selected={mode === "end"} aria-controls={panelId} onClick={() => setMode("end")}>Contraction</button>
+        {animationAvailable ? <button id={tabId("animation")} role="tab" type="button" aria-selected={activeMode === "animation"} aria-controls={panelId} onClick={() => setMode("animation")}>Animation</button> : null}
+        <button id={tabId("start")} role="tab" type="button" aria-selected={activeMode === "start"} aria-controls={panelId} onClick={() => setMode("start")}>Départ</button>
+        <button id={tabId("end")} role="tab" type="button" aria-selected={activeMode === "end"} aria-controls={panelId} onClick={() => setMode("end")}>Contraction</button>
       </div>
-      <div ref={containerRef} id={panelId} className="demoMedia" role="tabpanel" aria-labelledby={tabId(mode)}>
-        {activeMode === "animation" && animation ? (
+      <div ref={containerRef} id={panelId} className="demoMedia" role="tabpanel" aria-labelledby={tabId(activeMode)}>
+        {activeMode === "animation" && animation ? (webmFailed ? (
+          <Image src={inView ? animation.webp : start.src} alt={animation.alt} width={1000} height={1250} unoptimized className="demoImage" onError={() => setAnimationFailed(true)} />
+        ) : (
           <video
             ref={videoRef}
-            key={webmFailed ? animation.webp : animation.webm}
+            key={animation.webm}
             className="demoVideo"
-            src={webmFailed ? animation.webp : animation.webm}
+            src={animation.webm}
             autoPlay
             loop
             muted
@@ -74,11 +76,11 @@ export function ExerciseDemo({ start, end, animation, idPrefix = "exercise" }: {
             preload="metadata"
             aria-label={animation.alt}
             aria-describedby={descriptionId}
-            onError={() => webmFailed ? setAnimationFailed(true) : setWebmFailed(true)}
+            onError={() => setWebmFailed(true)}
           >
             {animation.captions ? <track kind="captions" src={animation.captions} srcLang="fr" label="Français" default /> : null}
           </video>
-        ) : (
+        )) : (
           <Image src={activeStatic.src} alt={activeStatic.alt} width={1000} height={1250} priority className="demoImage" />
         )}
       </div>

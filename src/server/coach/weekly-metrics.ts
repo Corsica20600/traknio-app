@@ -7,7 +7,7 @@ import type {
 
 type ExerciseExposure = {
   date: Date;
-  maxWeightKg: number | null;
+  lastSetWeightKg: number | null;
   totalReps: number;
 };
 
@@ -37,8 +37,8 @@ function firstNonNull(values: Array<number | null>) {
 function getExerciseTrend(exposures: ExerciseExposure[]): CoachExerciseProgress {
   const first = exposures[0];
   const latest = exposures.at(-1)!;
-  const baselineWeightKg = firstNonNull(exposures.map((exposure) => exposure.maxWeightKg));
-  const latestWeightKg = latestNonNull(exposures.map((exposure) => exposure.maxWeightKg));
+  const baselineWeightKg = firstNonNull(exposures.map((exposure) => exposure.lastSetWeightKg));
+  const latestWeightKg = latestNonNull(exposures.map((exposure) => exposure.lastSetWeightKg));
   const baselineReps = first.totalReps || null;
   const latestReps = latest.totalReps || null;
   const loadDeltaKg = baselineWeightKg !== null && latestWeightKg !== null
@@ -114,7 +114,7 @@ export function calculateCoachWeeklyMetrics(input: CoachWeeklyMetricsInput): Coa
       };
       record.exposures.push({
         date: session.occurredAt,
-        maxWeightKg: latestNonNull(exerciseSets.map((set) => set.actualWeightKg)),
+        lastSetWeightKg: latestNonNull(exerciseSets.map((set) => set.actualWeightKg)),
         totalReps: exerciseSets.reduce((total, set) => total + Math.max(set.actualReps ?? 0, 0), 0),
       });
       exposuresByExercise.set(exerciseId, record);

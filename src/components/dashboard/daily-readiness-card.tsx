@@ -10,7 +10,7 @@ type DailyReadinessCardProps = {
     score: number | null;
     tone: "accent" | "success" | "orange" | "danger";
     sleepLabel: string | null;
-    restingHeartRate: number | null;
+    averageHeartRate: number | null;
     caloriesToday: number | null;
     recommendation: string;
   };
@@ -63,11 +63,12 @@ export function DailyReadinessCard({ readiness }: DailyReadinessCardProps) {
 
         <div className="daily-readiness-card__metrics">
           <span><b>{readiness.sleepLabel ?? "-"}</b>Sommeil</span>
-          <span><b>{readiness.restingHeartRate ? `${readiness.restingHeartRate} bpm` : "-"}</b>FC repos</span>
+          <span><b>{readiness.averageHeartRate ? `${readiness.averageHeartRate} bpm` : "-"}</b>FC moyenne</span>
           <span><b>{readiness.caloriesToday ? `${formatNumber(readiness.caloriesToday)} kcal` : "-"}</b>Calories</span>
         </div>
 
-        <div className="daily-readiness-card__footer">
+        <p className="muted">La FC moyenne ne mesure pas la FC au repos et ne participe pas au score.</p>
+      <div className="daily-readiness-card__footer">
           <StatBadge tone="accent">Prêt</StatBadge>
           <p>{readiness.recommendation}</p>
         </div>
@@ -80,7 +81,7 @@ export function DailyReadinessCard({ readiness }: DailyReadinessCardProps) {
       <div className="daily-readiness-card__head">
         <div>
           <p className="eyebrow">État du jour</p>
-          <h2>Récupération</h2>
+          <h2>Récupération estimée</h2>
         </div>
         <div className="daily-readiness-card__score">
           <strong>{readiness.score ?? "-"}</strong>
@@ -94,7 +95,7 @@ export function DailyReadinessCard({ readiness }: DailyReadinessCardProps) {
 
       <div className="daily-readiness-card__metrics">
         <span><b>{readiness.sleepLabel ?? "-"}</b>Sommeil</span>
-        <span><b>{readiness.restingHeartRate ? `${readiness.restingHeartRate} bpm` : "-"}</b>FC repos</span>
+        <span><b>{readiness.averageHeartRate ? `${readiness.averageHeartRate} bpm` : "-"}</b>FC moyenne</span>
         <span><b>{readiness.caloriesToday ? `${formatNumber(readiness.caloriesToday)} kcal` : "-"}</b>Calories</span>
       </div>
 

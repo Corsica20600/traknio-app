@@ -1,16 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
-import { syncProgramExerciseTargets } from "@/src/server/program-target-sync";
+import { logPhoneWorkoutSet, WorkoutSetError } from "@/src/server/workout-log-set";
+import { getSharedRestRemaining } from "@/src/server/shared-rest-timer";
 import { logSyncMetric } from "@/src/server/sync-metrics";
 import { getAuthenticatedUserProfile } from "@/src/server/fitness-queries";
 import { ownsAccessibleWorkout } from "@/src/server/workout-access";
 
 export async function POST(request: Request) {
-  const body = await request.json();
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
 
   const sessionId = String(body.sessionId ?? "").trim();
   const profile = await getAuthenticatedUserProfile();
-  if (!await ownsAccessibleWorkout(profile, sessionId)) return NextResponse.json({ error: "workout_access_denied" }, { status: 403 });
+  if (!await ownsAccessibleWorkout(profile, sessionId, true)) return NextResponse.json({ error: "workout_access_denied" }, { status: 403 });
   const exerciseId = String(body.exerciseId ?? "").trim();
   const programExerciseId = String(body.programExerciseId ?? "").trim();
   const setIndex = Number(body.setIndex ?? 0);
@@ -21,113 +23,30 @@ export async function POST(request: Request) {
   const actualWeightKg = body.actualWeightKg == null ? null : Number(body.actualWeightKg);
   const restSeconds = Number(body.restSeconds ?? 90);
 
-  if (!sessionId || !exerciseId || !Number.isFinite(setIndex) || setIndex < 1) {
+  if (!sessionId || !exerciseId || !Number.isInteger(setIndex) || setIndex < 1) {
+    return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
+  }
+  if ([currentExerciseIndex, totalSetsForExercise, targetReps, actualReps, actualWeightKg, restSeconds].some(value => value != null && (!Number.isFinite(value) || value < 0)) ||
+      (actualReps != null && (!Number.isInteger(actualReps) || actualReps < 1)) ||
+      (currentExerciseIndex != null && !Number.isInteger(currentExerciseIndex)) ||
+      (totalSetsForExercise != null && (!Number.isInteger(totalSetsForExercise) || totalSetsForExercise < 1))) {
     return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
   }
   const actionId = request.headers.get("x-traknio-action-id")?.trim() || undefined;
   logSyncMetric({ event: "API_RECEIVED", sessionId, actionId, action: "validate-set", origin: "PHONE", transport: "HTTPS_PHONE" });
 
-  const existing = await prisma.workoutSet.findFirst({
-    where: { workoutSessionId: sessionId, exerciseId, setIndex },
-    orderBy: { createdAt: "desc" },
-  });
-  const latestPositiveWeightInSession = await prisma.workoutSet.findFirst({
-    where: {
-      workoutSessionId: sessionId,
-      exerciseId,
-      actualWeightKg: { gt: 0 },
-    },
-    orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
-    select: { actualWeightKg: true },
-  });
-  const latestPositiveWeightGlobal = await prisma.workoutSet.findFirst({
-    where: {
-      workoutSession: { userProfileId: profile.id },
-      exerciseId,
-      actualWeightKg: { gt: 0 },
-    },
-    orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
-    select: { actualWeightKg: true },
-  });
-  const resolvedWeight = (() => {
-    const incoming = Number.isFinite(actualWeightKg as number) && (actualWeightKg as number) >= 0 ? (actualWeightKg as number) : null;
-    if (incoming != null && incoming > 0) return incoming;
-    if ((existing?.actualWeightKg ?? 0) > 0) return existing!.actualWeightKg!;
-    if ((latestPositiveWeightInSession?.actualWeightKg ?? 0) > 0) return latestPositiveWeightInSession!.actualWeightKg!;
-    if ((latestPositiveWeightGlobal?.actualWeightKg ?? 0) > 0) return latestPositiveWeightGlobal!.actualWeightKg!;
-    return incoming;
-  })();
-
-  const payload = {
-    targetRepsMin: Number.isFinite(targetReps) && targetReps > 0 ? targetReps : null,
-    targetRepsMax: Number.isFinite(targetReps) && targetReps > 0 ? targetReps : null,
-    actualReps: Number.isFinite(actualReps as number) && (actualReps as number) > 0 ? (actualReps as number) : null,
-    actualWeightKg: resolvedWeight,
-    restSeconds: Number.isFinite(restSeconds) ? Math.max(0, restSeconds) : 90,
-    isCompleted: true,
-    completedAt: new Date(),
-  };
-  const syncedProgramExerciseId = await syncProgramExerciseTargets({
-    workoutSessionId: sessionId,
-    exerciseId,
-    programExerciseId: programExerciseId || null,
-    actualReps: payload.actualReps,
-    actualWeightKg: payload.actualWeightKg,
-  });
-
   const transactionStartedAt = Date.now();
   logSyncMetric({ event: "DB_TRANSACTION_STARTED", sessionId, actionId, action: "validate-set", origin: "PHONE", transport: "HTTPS_PHONE" });
-  const saved = await prisma.$transaction(async (tx) => {
-    const completedSet = existing
-      ? await tx.workoutSet.update({
-        where: { id: existing.id },
-        data: {
-          ...payload,
-          ...(syncedProgramExerciseId ? { programExerciseId: syncedProgramExerciseId } : {}),
-        },
-      })
-      : await tx.workoutSet.create({
-        data: {
-          workoutSessionId: sessionId,
-          exerciseId,
-          programExerciseId: syncedProgramExerciseId,
-          setIndex,
-          ...payload,
-        },
-      });
-
-    const exerciseFinished =
-    Number.isFinite(totalSetsForExercise as number) &&
-    (totalSetsForExercise as number) > 0 &&
-    completedSet.setIndex >= Math.floor(totalSetsForExercise as number);
-    const baseExerciseIndex = Number.isFinite(currentExerciseIndex as number) ? Math.max(0, Math.floor(currentExerciseIndex as number)) : 0;
-    const nextExerciseIndex = exerciseFinished ? baseExerciseIndex + 1 : baseExerciseIndex;
-    const nextSetIndex = exerciseFinished ? 1 : Math.max(1, completedSet.setIndex + 1);
-
-    const watchState = await tx.watchSession.upsert({
-    where: { workoutSessionId: sessionId },
-    update: {
-      currentExerciseIndex: nextExerciseIndex,
-      currentSetIndex: nextSetIndex,
-      status: "ACTIVE",
-      restStatus: payload.restSeconds > 0 ? "ACTIVE" : "IDLE",
-      restRemainingSeconds: payload.restSeconds,
-      restUpdatedAt: new Date(),
-      lastSyncAt: new Date(),
-    },
-    create: {
-      workoutSessionId: sessionId,
-      currentExerciseIndex: nextExerciseIndex,
-      currentSetIndex: nextSetIndex,
-      status: "ACTIVE",
-      restStatus: payload.restSeconds > 0 ? "ACTIVE" : "IDLE",
-      restRemainingSeconds: payload.restSeconds,
-      restUpdatedAt: new Date(),
-      lastSyncAt: new Date(),
-    },
-    });
-    return { completedSet, watchState };
-  });
+  let saved;
+  try {
+    saved = await prisma.$transaction(tx => logPhoneWorkoutSet(tx, {
+      sessionId, userProfileId: profile.id, exerciseId, programExerciseId, setIndex,
+      currentExerciseIndex, totalSetsForExercise, targetReps, actualReps, actualWeightKg, restSeconds,
+    }));
+  } catch (error) {
+    if (error instanceof WorkoutSetError) return NextResponse.json({ error: error.message }, { status: 409 });
+    throw error;
+  }
   logSyncMetric({ event: "DB_COMMITTED", sessionId, actionId, action: "validate-set", origin: "PHONE", transport: "HTTPS_PHONE", durationMs: Date.now() - transactionStartedAt });
 
   logSyncMetric({ event: "API_CONFIRMED", sessionId, actionId, action: "validate-set", origin: "PHONE", transport: "HTTPS_PHONE", status: 200 });
@@ -141,17 +60,17 @@ export async function POST(request: Request) {
       actualWeightKg: saved.completedSet.actualWeightKg,
       createdAt: saved.completedSet.createdAt.toISOString(),
     },
-    state: {
+    state: saved.watchState ? {
       sessionId,
       revision: saved.watchState.lastSyncAt.toISOString(),
-      status: "IN_PROGRESS",
+      status: saved.sessionStatus === "COMPLETED" ? "COMPLETED" : "IN_PROGRESS",
       exerciseIndex: saved.watchState.currentExerciseIndex,
       setIndex: saved.watchState.currentSetIndex,
       targetReps: null,
       weight: null,
-      restRemaining: saved.watchState.restRemainingSeconds,
+      restRemaining: getSharedRestRemaining({ status: saved.watchState.restStatus, remainingSeconds: saved.watchState.restRemainingSeconds, updatedAt: saved.watchState.restUpdatedAt }),
       restStatus: saved.watchState.restStatus,
       restUpdatedAt: saved.watchState.restUpdatedAt?.toISOString() ?? null,
-    },
+    } : undefined,
   });
 }

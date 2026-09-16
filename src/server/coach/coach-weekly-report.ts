@@ -53,7 +53,7 @@ function parseHealthMetricName(notes: string | null) {
   }
 }
 
-function getRecoverySnapshot(metrics: Array<{ value: number; measuredAt: Date; notes: string | null }>): CoachRecoverySnapshot | null {
+export function getRecoverySnapshot(metrics: Array<{ value: number; measuredAt: Date; notes: string | null }>): CoachRecoverySnapshot | null {
   const latest = new Map<string, number>();
   for (const metric of metrics) {
     const name = parseHealthMetricName(metric.notes);
@@ -64,7 +64,7 @@ function getRecoverySnapshot(metrics: Array<{ value: number; measuredAt: Date; n
 
   const recovery: CoachRecoverySnapshot = {
     ...(latest.has("sleep_minutes") ? { sleepMinutes: latest.get("sleep_minutes") } : {}),
-    ...(latest.has("heart_rate") ? { restingHeartRate: latest.get("heart_rate") } : {}),
+    ...(latest.has("heart_rate") ? { averageHeartRate: latest.get("heart_rate") } : {}),
     ...(latest.has("calories") ? { calories: latest.get("calories") } : {}),
   };
   return Object.keys(recovery).length > 0 ? recovery : null;
@@ -149,7 +149,7 @@ function getEvidenceKeys(metrics: CoachWeeklyMetrics) {
     keys.add(`exercise.${exercise.exerciseId}.trend`);
   }
   if (metrics.recovery?.sleepMinutes !== undefined) keys.add("recovery.sleepMinutes");
-  if (metrics.recovery?.restingHeartRate !== undefined) keys.add("recovery.restingHeartRate");
+  // The imported heart rate is an average; it is not evidence of recovery.
   if (metrics.recovery?.calories !== undefined) keys.add("recovery.calories");
   if (metrics.limitations.length > 0) keys.add("limitations.declared");
   return keys;
@@ -196,6 +196,8 @@ async function requestCoachAnalysis(metrics: CoachWeeklyMetrics, evidenceKeys: S
       input: [
         "Tu es Traknio Coach. Interprete uniquement les metriques JSON fournies.",
         "Ne cite aucune donnee absente. Ne pose aucun diagnostic medical et ne presente jamais une recommandation comme une certitude medicale.",
+        "baselineWeightKg et latestWeightKg representent la derniere charge renseignee de chaque seance, pas la charge maximale. Une baisse peut correspondre a une serie allegee; ne conclus pas a une perte de force sur ce seul indice.",
+        "averageHeartRate est une moyenne des echantillons importes, pas une frequence cardiaque au repos. Ne l'utilise pas pour deduire la recuperation, la fatigue ou un etat de sante.",
         "Ne recommande jamais une augmentation chiffree de charge ou une progression brutale.",
         "Chaque recommandation doit contenir au moins une cle exacte dans dataUsed, choisie uniquement dans la liste autorisee.",
         "Si les donnees sont insuffisantes, dis-le avec prudence et retourne zero recommandation plutot que d'inventer.",

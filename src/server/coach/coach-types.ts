@@ -26,6 +26,8 @@ export type CoachWorkoutSession = {
 
 export type CoachRecoverySnapshot = {
   sleepMinutes?: number;
+  averageHeartRate?: number;
+  /** Legacy reports only; this was an average, not a resting measurement. */
   restingHeartRate?: number;
   calories?: number;
 };
