@@ -5,6 +5,7 @@ import android.app.Activity
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
+import androidx.activity.viewModels
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -24,14 +25,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
 
 class MainActivity : ComponentActivity() {
+    private val watchViewModel by viewModels<WatchViewModel> {
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return WatchViewModel(applicationContext) as T
+            }
+        }
+    }
+
     override fun onStart() {
         super.onStart()
         ExerciseTrackingService.activityVisible = true
@@ -43,25 +51,23 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
+        // Keep the platform splash over the first data fetch. Showing Compose's
+        // old LoadingScreen here created a second, custom splash after Android's
+        // compliant one, which Play can evaluate as the app startup screen.
+        val splashScreen = installSplashScreen()
+        splashScreen.setKeepOnScreenCondition {
+            watchViewModel.state.value is WatchScreenState.Loading
+        }
         super.onCreate(savedInstanceState)
         setContent {
-            TraknioWearApp()
+            TraknioWearApp(watchViewModel)
         }
     }
 }
 
 @Composable
-private fun TraknioWearApp() {
+private fun TraknioWearApp(viewModel: WatchViewModel) {
     val context = LocalContext.current.applicationContext
-    val viewModel: WatchViewModel = viewModel(
-        factory = object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return WatchViewModel(context) as T
-            }
-        },
-    )
     val state by viewModel.state.collectAsState()
     val library by viewModel.programLibrary.collectAsState()
     val insights by viewModel.insights.collectAsState()
@@ -108,10 +114,8 @@ private fun TraknioWearApp() {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     BackHandler(enabled = activeSessionId != null) { activity?.moveTaskToBack(true) }
-    // Continue the same plain launch presentation while the initial data loads.
-    // No extra Activity, timer or splash animation; data loading is unchanged.
+    // The platform splash remains visible while this state is Loading.
     if (state is WatchScreenState.Loading) {
-        LoadingScreen()
         return
     }
     MaterialTheme {
@@ -127,7 +131,7 @@ private fun TraknioWearApp() {
                         WorkoutInsights(insights, viewModel::openInsights, viewModel::closeInsights,
                             viewModel::refreshInsights, viewModel::moreHistory, viewModel::openPrograms)
                     } else when (val current = state) {
-                        WatchScreenState.Loading -> LoadingScreen()
+                        WatchScreenState.Loading -> Unit
                         is WatchScreenState.Empty -> WorkoutEmpty(current.message, viewModel::refresh, viewModel::openPrograms, { viewModel.openInsights("menu") })
                         is WatchScreenState.Ready -> ReadyScreen(current, viewModel)
                     }
@@ -145,13 +149,6 @@ internal fun WatchChrome(content: @Composable () -> Unit) {
                 .padding(horizontal = 16.dp, vertical = 26.dp),
             contentAlignment = Alignment.Center,
         ) { content() }
-    }
-}
-
-@Composable
-private fun LoadingScreen() {
-    Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-        androidx.compose.foundation.Image(painterResource(R.drawable.traknio_favicon), null, Modifier.size(48.dp))
     }
 }
 

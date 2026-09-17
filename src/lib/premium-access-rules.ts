@@ -26,9 +26,18 @@ export function getFreeAccessEmails() {
   );
 }
 
+function getGooglePlayReviewerEmail() {
+  return process.env.TRAKNIO_REVIEWER_EMAIL?.trim().toLowerCase() || null;
+}
+
+function hasExplicitFullAccess(email: string | undefined) {
+  if (!email) return false;
+  return getFreeAccessEmails().has(email) || getGooglePlayReviewerEmail() === email;
+}
+
 export function hasSubscriptionAccess(profile: AccessProfile, now = Date.now()) {
   const email = profile.email?.trim().toLowerCase();
-  if (email && getFreeAccessEmails().has(email)) return true;
+  if (hasExplicitFullAccess(email)) return true;
   const entitlementEnd = profile.subscriptionCurrentPeriodEnd?.getTime() ?? 0;
   return entitlementEnd > now
     && ["ACTIVE", "TRIALING", "PAST_DUE", "CANCELED"].includes(profile.subscriptionStatus);
@@ -37,7 +46,7 @@ export function hasSubscriptionAccess(profile: AccessProfile, now = Date.now()) 
 /** Full features require a paid entitlement (or an explicitly granted access). */
 export function hasFullAccess(profile: AccessProfile, now = Date.now()) {
   const email = profile.email?.trim().toLowerCase();
-  if (email && getFreeAccessEmails().has(email)) return true;
+  if (hasExplicitFullAccess(email)) return true;
   return profile.subscriptionStatus !== "TRIALING" && hasSubscriptionAccess(profile, now);
 }
 

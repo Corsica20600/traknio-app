@@ -6912,6 +6912,34 @@ summary:focus-visible {
   display: block;
 }
 
+.reviewer-login-form {
+  display: grid;
+  gap: 10px;
+  padding: 18px 16px 16px;
+  border-top: 1px solid rgba(120, 168, 255, .18);
+}
+
+.reviewer-login-form p {
+  margin: 0;
+  color: var(--fit-text-muted);
+  font-size: .72rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.reviewer-login-form label {
+  display: grid;
+  gap: 5px;
+  color: #c9dcff;
+  font-size: .73rem;
+  font-weight: 800;
+}
+
+.reviewer-login-form .primary-button {
+  min-height: 46px;
+  font-size: .8rem;
+}
+
 .login-reference-card .legal-link-row {
   padding: 9px 8px 12px;
   background: linear-gradient(180deg, rgba(2, 6, 17, .98), #020611);

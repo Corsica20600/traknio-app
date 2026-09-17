@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- AndroidX SplashScreen renders this drawable at its intrinsic 48 × 48 dp. -->
+<!-- Dedicated 48dp Wear mark. Its colored bounds fill the icon rather than
+     embedding the old padded favicon bitmap inside the Android splash canvas. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="48dp"
     android:height="48dp"

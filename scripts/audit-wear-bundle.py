@@ -1,6 +1,6 @@
 """Inspect the actual Wear AAB (not source Gradle values) before delivery.
 
-python scripts/audit-wear-bundle.py BUNDLE --bundletool PATH --version-code 29
+python scripts/audit-wear-bundle.py BUNDLE --bundletool PATH --version-code 38 --version-name 0.5.10
 Requires Python, Java and Google's bundletool-all.jar; no Python dependencies.
 """
 import argparse
@@ -34,7 +34,7 @@ def elf_segments(data):
     return {"bits": 64 if is64 else 32, "load_alignments": loads, "gnu_relro": relro}
 
 
-def inspect(bundle, bundletool, version):
+def inspect(bundle, bundletool, version, version_name):
     def run(*args):
         return subprocess.check_output(["java", "-jar", str(bundletool), *args], encoding="utf-8")
 
@@ -48,7 +48,7 @@ def inspect(bundle, bundletool, version):
     checks = {
         "package": manifest.get("package") == "com.traknio.app",
         "version_code": manifest.get(ANDROID + "versionCode") == str(version),
-        "version_name": manifest.get(ANDROID + "versionName") == "0.5.8",
+        "version_name": manifest.get(ANDROID + "versionName") == version_name,
         "target_sdk": int(sdk.get(ANDROID + "targetSdkVersion", "0")) >= 35,
         "watch_required": any(n.get(ANDROID + "name") == "android.hardware.type.watch" and
                               n.get(ANDROID + "required") == "true" for n in manifest.findall("uses-feature")),
@@ -93,9 +93,10 @@ if __name__ == "__main__":
     parser.add_argument("bundle", type=Path)
     parser.add_argument("--bundletool", required=True, type=Path)
     parser.add_argument("--version-code", required=True, type=int)
+    parser.add_argument("--version-name", required=True)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    result = inspect(args.bundle, args.bundletool, args.version_code)
+    result = inspect(args.bundle, args.bundletool, args.version_code, args.version_name)
     serialized = json.dumps(result, indent=2, ensure_ascii=False)
     if args.output:
         args.output.write_text(serialized + "\n", encoding="utf-8")

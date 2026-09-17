@@ -73,8 +73,8 @@ android {
         applicationId = "com.traknio.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 37
-        versionName = "0.5.9"
+        versionCode = 38
+        versionName = "0.5.10"
 
         val syncBaseUrl = propertyValue("TRAKNIO_SYNC_BASE_URL")
             ?: "https://www.traknio.com"
