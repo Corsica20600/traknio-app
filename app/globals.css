@@ -6893,38 +6893,54 @@ summary:focus-visible {
     0 0 34px rgba(0, 217, 255, .14);
 }
 
-.login-reference-form,
-.login-reference-button {
-  display: block;
-  width: 100%;
-}
-
-.login-reference-button {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
+.login-reference-form {
+  display: grid;
+  gap: 12px;
+  padding: 16px 16px 18px;
 }
 
 .login-reference-image {
   width: 100%;
   height: auto;
   display: block;
+  pointer-events: none;
+}
+
+.login-google-button {
+  min-height: 48px;
+  border: 1px solid rgba(112, 168, 255, .72);
+  border-radius: 15px;
+  background: linear-gradient(135deg, #3d9fff, #2b58dd);
+  box-shadow: 0 8px 22px rgba(34, 96, 221, .32);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: .82rem;
+  font-weight: 800;
 }
 
 .reviewer-login-form {
   display: grid;
   gap: 10px;
-  padding: 18px 16px 16px;
-  border-top: 1px solid rgba(120, 168, 255, .18);
 }
 
-.reviewer-login-form p {
+.reviewer-login-card {
+  display: grid;
+  gap: 14px;
+  max-width: 430px;
+  margin-inline: auto;
+  padding: 24px;
+}
+
+.reviewer-login-card h1,
+.reviewer-login-card > p {
   margin: 0;
+}
+
+.reviewer-login-card > p {
   color: var(--fit-text-muted);
-  font-size: .72rem;
-  font-weight: 700;
-  line-height: 1.4;
+  font-size: .88rem;
+  line-height: 1.45;
 }
 
 .reviewer-login-form label {
