@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Keep launcher masking out of the system splash. Wear OS provides black. -->
+<!--
+    The adaptive-icon foreground must expose the complete 108dp artboard.
+    Without this transparent canvas, Wear scales the mark's own intrinsic size
+    to the artboard and crops it in the launcher mask.
+-->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/wear_launcher_foreground_canvas" />
     <item
         android:width="48dp"
         android:height="28dp"

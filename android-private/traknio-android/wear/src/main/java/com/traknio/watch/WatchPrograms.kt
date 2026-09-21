@@ -8,6 +8,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.json.JSONObject
@@ -82,6 +83,6 @@ internal fun WorkoutPrograms(library: WatchProgramLibrary, onBack: () -> Unit, o
 private fun ProgramCard(title: String, subtitle: String, enabled: Boolean, onClick: () -> Unit) {
     Chip(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
         colors = ChipDefaults.chipColors(backgroundColor = WatchPalette.Surface, contentColor = Color.White),
-        label = { Text(title, fontSize = 13.sp) },
-        secondaryLabel = { Text(subtitle, color = WatchPalette.Muted, fontSize = 11.sp) })
+        label = { Text(title, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        secondaryLabel = { Text(subtitle, color = WatchPalette.Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) })
 }

@@ -144,11 +144,7 @@ private fun TraknioWearApp(viewModel: WatchViewModel) {
 @Composable
 internal fun WatchChrome(content: @Composable () -> Unit) {
     Scaffold(timeText = { TimeText(modifier = Modifier.padding(top = 3.dp)) }) {
-        Box(
-            Modifier.fillMaxSize().background(Color.Black)
-                .padding(horizontal = 16.dp, vertical = 26.dp),
-            contentAlignment = Alignment.Center,
-        ) { content() }
+        WearSafeScreen(Modifier.fillMaxSize().background(Color.Black), content)
     }
 }
 

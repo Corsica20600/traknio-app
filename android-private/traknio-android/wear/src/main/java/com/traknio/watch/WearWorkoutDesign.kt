@@ -67,7 +67,17 @@ internal fun WorkoutHeading(title: String, subtitle: String? = null) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        subtitle?.let { Text(it, color = WatchPalette.Muted, fontSize = 11.sp, textAlign = TextAlign.Center) }
+        subtitle?.let {
+            Text(
+                it,
+                modifier = Modifier.fillMaxWidth(),
+                color = WatchPalette.Muted,
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -81,9 +91,18 @@ internal fun WorkoutPill(text: String, enabled: Boolean = true, primary: Boolean
             contentColor = if (primary) Color.Black else Color.White,
             disabledBackgroundColor = WatchPalette.Surface,
         ),
-        label = { Text(text, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
-            color = if (enabled) Color.Unspecified else WatchPalette.Muted,
-            fontSize = 13.sp, fontWeight = FontWeight.SemiBold) },
+        label = {
+            Text(
+                text,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+                color = if (enabled) Color.Unspecified else WatchPalette.Muted,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
     )
 }
 
@@ -140,7 +159,7 @@ internal fun WorkoutExerciseList(payload: WatchPayload, enabled: Boolean, onExer
             val complete = exercise.completedSets >= exercise.totalSets
             Chip(
                 shape = RoundedCornerShape(18.dp),
-                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                modifier = Modifier.fillMaxWidth().heightIn(min = WearDimensions.exerciseListCardHeight)
                     .border(1.dp, if (active) WatchPalette.Blue else Color.Transparent, RoundedCornerShape(18.dp)),
                 onClick = { onExercise(exercise.index) }, enabled = enabled,
                 colors = ChipDefaults.chipColors(backgroundColor = if (active) Color(0xFF0C1A2F) else WatchPalette.Surface),
@@ -148,7 +167,8 @@ internal fun WorkoutExerciseList(payload: WatchPayload, enabled: Boolean, onExer
                     tint = if (complete) WatchPalette.Green else WatchPalette.Blue, modifier = Modifier.size(20.dp)) },
                 label = { Text(wearExerciseName(exercise.name), fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                 secondaryLabel = { Text(if (complete) "Terminées · ${exercise.totalSets} séries" else "${exercise.completedSets}/${exercise.totalSets} séries",
-                    color = if (complete) WatchPalette.Green else WatchPalette.Muted, fontSize = 11.sp) },
+                    color = if (complete) WatchPalette.Green else WatchPalette.Muted, fontSize = 11.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis) },
             )
         }
     }
@@ -175,7 +195,8 @@ internal fun WorkoutExerciseDetail(payload: WatchPayload, selectedIndex: Int?, e
                 Text("$set", color = WatchPalette.Muted, fontSize = 12.sp, modifier = Modifier.width(22.dp))
                 // Payload contains targets, not historical actuals: don't present targets as recorded results.
                 Text(if (done) "Série enregistrée" else "${(exercise?.weight ?: payload.weight)?.let { "${wearWeight(it)} kg" } ?: "Corps"} × ${exercise?.targetReps ?: payload.targetReps}",
-                    modifier = Modifier.weight(1f), fontSize = 11.sp, color = Color.White)
+                    modifier = Modifier.weight(1f), fontSize = 11.sp, color = Color.White,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(if (done) "✓" else if (isActive) "•" else "", color = WatchPalette.Green)
             }
         }
@@ -254,12 +275,12 @@ internal fun WorkoutRest(state: WatchScreenState.Ready, onPause: () -> Unit, onS
                 Text("Respire", color = WatchPalette.Muted, fontSize = 11.sp)
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             WorkoutCircle(if (state.pausedRestRemaining != null) "▶" else "Ⅱ", "Pause ou reprise du repos", enabled, WatchPalette.Blue, onPause)
             WorkoutCircle("×", "Passer le repos", enabled, onClick = onSkip)
         }
         WorkoutError(state.error)
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             WorkoutCircle("−15", "Retirer 15 secondes", enabled, onClick = onRemove)
             WorkoutCircle("+15", "Ajouter 15 secondes", enabled, onClick = onAdd)
         }
@@ -295,8 +316,10 @@ internal fun WorkoutSummary(state: WatchScreenState.Ready, onFinish: () -> Unit)
 private fun SummaryTile(symbol: String, value: String, label: String, color: Color, modifier: Modifier) {
     Column(modifier.padding(vertical = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(symbol, color = color, fontSize = 16.sp)
-        Text(value, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-        Text(label, color = WatchPalette.Muted, fontSize = 11.sp)
+        Text(value, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(label, color = WatchPalette.Muted, fontSize = 11.sp, maxLines = 1,
+            overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -305,8 +328,12 @@ private fun SummaryLine(symbol: String, value: String, label: String, color: Col
     Row(Modifier.fillMaxWidth(0.94f).background(WatchPalette.Surface, RoundedCornerShape(14.dp))
         .padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(symbol, color = color, fontSize = 20.sp, modifier = Modifier.width(30.dp))
-        Column { Text(value, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Text(label, color = WatchPalette.Muted, fontSize = 11.sp) }
+        Column(Modifier.weight(1f)) {
+            Text(value, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(label, color = WatchPalette.Muted, fontSize = 11.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 

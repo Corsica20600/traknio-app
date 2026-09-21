@@ -6,10 +6,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.wear.compose.material.Text
 
 data class WatchFeedbackState(val sessionId: String? = null, val loading: Boolean = false, val saved: Boolean = false, val error: String? = null)
@@ -29,13 +32,14 @@ internal fun WorkoutFeedback(sessionId: String, state: WatchFeedbackState, onSub
             WorkoutPill("Terminer", primary = true, onClick = onClose)
         } else {
             WorkoutHeading("Comment était\ncette séance ?")
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            // 3 × 48 dp must still fit the 192 dp round safe content width.
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 listOf("☹", "😐", "☺").forEachIndexed { index, face ->
                     WorkoutCircle(face, listOf("Difficile", "Correcte", "Très bonne")[index], !current.loading,
                         if (rating == index + 1) WatchPalette.Green else WatchPalette.Surface) { rating = index + 1 }
                 }
             }
-            if (note.isNotBlank()) Text(note, fontSize = 11.sp)
+            if (note.isNotBlank()) Text(note, fontSize = 11.sp, maxLines = 4, overflow = TextOverflow.Ellipsis)
             WorkoutPill("Dicter une note", !current.loading) {
                 speechError = runCatching { speech.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)) }.isFailure
             }
