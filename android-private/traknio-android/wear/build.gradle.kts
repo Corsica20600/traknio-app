@@ -76,8 +76,8 @@ android {
         // Play Console tracks were checked on 20 September 2026: 38 is the
         // highest occupied Wear code (internal testing), so 39 is the next
         // free monotonic release candidate.
-        versionCode = 39
-        versionName = "0.5.11"
+        versionCode = 40
+        versionName = "0.5.12"
 
         val syncBaseUrl = propertyValue("TRAKNIO_SYNC_BASE_URL")
             ?: "https://www.traknio.com"
