@@ -6919,6 +6919,19 @@ summary:focus-visible {
   font-weight: 800;
 }
 
+.login-reviewer-link {
+  color: var(--fit-text-muted);
+  font-size: .72rem;
+  justify-self: center;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.login-reviewer-link:focus-visible {
+  outline: 2px solid var(--fit-cyan);
+  outline-offset: 4px;
+}
+
 .reviewer-login-form {
   display: grid;
   gap: 10px;

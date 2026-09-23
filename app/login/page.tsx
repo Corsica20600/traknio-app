@@ -60,6 +60,12 @@ export default async function LoginPage(props: LoginPageProps) {
             Se connecter avec Google
           </button>
         </form>
+        <Link
+          className="login-reviewer-link"
+          href={`/google-play-review?callbackUrl=${encodeURIComponent(callbackUrl)}`}
+        >
+          Accès de vérification Google Play
+        </Link>
         <div className="legal-link-row" aria-label="Documents légaux">
           <Link href="/privacy">Confidentialité</Link>
           <span aria-hidden="true">·</span>
