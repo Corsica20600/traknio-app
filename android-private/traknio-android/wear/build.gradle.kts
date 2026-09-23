@@ -73,9 +73,9 @@ android {
         applicationId = "com.traknio.app"
         minSdk = 30
         targetSdk = 35
-        // Play Console tracks were checked on 20 September 2026: 38 is the
-        // highest occupied Wear code (internal testing), so 39 is the next
-        // free monotonic release candidate.
+        // Play Console tracks were checked on 23 September 2026: 39 is a
+        // rejected, pending Production candidate, so 40 is the next free
+        // monotonic Wear release candidate.
         versionCode = 40
         versionName = "0.5.12"
 
